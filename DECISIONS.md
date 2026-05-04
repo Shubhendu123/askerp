@@ -34,4 +34,16 @@ This document captures the meaningful decisions made during the build, in the fo
 **Decision:** Calendar year.
 **Tradeoffs:** Simpler date logic in queries and demos; loses the "fiscal date awareness" demo angle (which can be added later as a feature).
 
+### D-006: Star schema with NetSuite-shaped naming
+**Context:** Schema design affects LLM accuracy and the "scales to real NetSuite" story.
+**Options:** Normalized 3NF (OLTP-style), star schema (analytics standard), one-big-table (denormalized).
+**Decision:** Star schema with NetSuite-shaped table names (transaction, transactionline-style).
+**Tradeoffs:** LLMs handle star schemas significantly better — fewer joins, predictable patterns. NetSuite-shaped naming makes the "could this work on real NetSuite?" answer "yes, the shape matches."
+
+### D-007: Synthetic data with planted anomalies
+**Context:** Demo quality depends on whether the data tells a story or feels random.
+**Options:** Random data, real-world data (compliance/privacy issues), synthetic with intentional patterns.
+**Decision:** Synthetic with three planted anomalies (refund spike, whale customer churn, margin compression).
+**Tradeoffs:** Demos become repeatable and memorable. Risk: anomalies must be subtle enough that the LLM has to actually find them, not so subtle the LLM misses them — calibration needed in Day 3.
+
 (More decisions will be added as we build.)
