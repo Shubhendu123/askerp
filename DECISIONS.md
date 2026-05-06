@@ -73,4 +73,12 @@ This document captures the meaningful decisions made during the build, in the fo
 **Decision:** Production-shaped loader.
 **Tradeoffs:** ~3x more code to write, but the verification suite catches data issues before they corrupt agent evaluation. The audit log gives reproducibility ("which load was used for which eval run"). The pattern is what an interviewer would expect to see in a real system, not a portfolio shortcut.
 
+### D-011: Customer order distribution is uniform, not Pareto
+**Context:** Verification check V15 revealed the top 5 customers all have nearly identical order counts (933-949 range). Real B2B data shows power-law / Pareto distribution where the top customer is typically 2-3x the 5th customer in volume.
+**Options considered:**
+- Inject Pareto distribution into customer-ordering frequency logic (more realistic, requires regenerating fact_sales_order)
+- Accept uniform distribution and document the tradeoff
+**Decision:** Accept uniform distribution.
+**Tradeoffs:** Loses some realism in "top customers by volume" queries — answers will look flat. Does NOT affect the three planted anomalies (refund spike, whale churn, margin compression), which drive the primary evaluation signal. Honest acknowledgment in interviews positions this as a deliberate scope decision rather than an oversight. Could be added in extension as part of "realistic data noise" workstream.
+
 (More decisions will be added as we build.)
