@@ -56,4 +56,21 @@ This document captures the meaningful decisions made during the build, in the fo
 **Tradeoffs:** Higher cost per query (~$0.02-0.05 vs $0.005 single-call), higher latency (3-6s vs 1-2s), more code to maintain. Mitigation: model tiering (Haiku for validator/critic, Sonnet for generator), parallelize where possible, eval suite catches regressions.
 **Out of scope:** Forecasting, anomaly detection, classification — these are ML problems that a production system would solve with trained models, orchestrated by the agent. Demonstrating the orchestration pattern is sufficient for portfolio.
 
+### D-009: DuckDB chosen over Postgres/SQLite for the warehouse
+**Context:** Need an embedded SQL warehouse with strong analytical performance for the agent layer to query.
+**Options considered:**
+- SQLite: lightweight, ubiquitous, but optimized for transactional workloads — analytical queries (group bys, window functions) are slow
+- Postgres: full-featured but requires a server, container, or hosted instance — adds deployment complexity for a portfolio project
+- DuckDB: embedded like SQLite but built columnar and analytics-first; native Parquet/CSV loading; SQL dialect close to BigQuery/Snowflake/Postgres
+**Decision:** DuckDB.
+**Tradeoffs:** No multi-user concurrency (single-writer), but our use case is single-tenant-per-deploy. SQL dialect close enough to Snowflake that the architectural pattern transfers. File-based deployment fits Vercel serverless and local dev with no infra changes.
+
+### D-010: Production-shaped loader pattern over quick load script
+**Context:** The warehouse is the foundation of every agent decision in Week 2+. Reliability of the load directly affects agent reliability.
+**Options considered:**
+- Quick load (pandas.to_sql in a notebook): fastest to write, but no idempotency, no validation, no audit trail
+- Production-shaped loader: idempotent, schema-driven DDL, FK validation, audit logging, 15-query verification suite
+**Decision:** Production-shaped loader.
+**Tradeoffs:** ~3x more code to write, but the verification suite catches data issues before they corrupt agent evaluation. The audit log gives reproducibility ("which load was used for which eval run"). The pattern is what an interviewer would expect to see in a real system, not a portfolio shortcut.
+
 (More decisions will be added as we build.)
