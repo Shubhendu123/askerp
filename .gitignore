@@ -29,13 +29,15 @@ yarn-error.log*
 .env
 .env*.local
 
-# data files
-/data/*.db
-/data/load_audit.log
-
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Generated data and verification artifacts
+data/raw/
+data/verify_output.txt
+data/load_audit.log
+data/northwind.db

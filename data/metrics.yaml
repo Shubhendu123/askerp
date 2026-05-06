@@ -1,0 +1,641 @@
+metadata:
+  semantic_layer_version: "1.0"
+  business_entity: "Northwind Furniture"
+  fiscal_year: "Calendar year (Jan-Dec)"
+  currency: "USD"
+  last_updated: "2026-05-06"
+  notes: >
+    Formulas are base computations without period filters. The agent layer injects
+    date range conditions based on the user's question before execution. All formulas
+    are validated against data/northwind.db (DuckDB, schema version 1.0).
+
+metric_domains:
+  - name: "Revenue"
+    description: "Top-line metrics tracking sales performance and growth."
+    owner: "Finance"
+  - name: "Profitability"
+    description: "Margin and profit metrics across product categories and customer segments."
+    owner: "Finance"
+  - name: "Customer"
+    description: "Metrics on customer base health, concentration, and lifecycle."
+    owner: "Sales"
+  - name: "Operational"
+    description: "Metrics on order fulfillment, returns, and operational efficiency."
+    owner: "Operations"
+
+metrics:
+
+  # ────────────────────────────────────────────────────────────────
+  # REVENUE DOMAIN
+  # ────────────────────────────────────────────────────────────────
+
+  - name: total_revenue
+    domain: Revenue
+    description: |
+      Booked revenue from sales orders, recognized at order confirmation.
+      Includes the value of all confirmed and delivered orders. Excludes
+      cancelled and pending orders. This is the primary top-line metric
+      reported to leadership and used in board reporting at Northwind.
+      Finance uses this in monthly close, QBRs, and annual planning.
+      Sales uses it for quota attainment and commission calculations.
+    formula: |
+      SELECT SUM(fso.total_amount)
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_customer.industry
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+      - dim_item.category
+      - dim_location.region
+    synonyms:
+      - revenue
+      - sales
+      - top line
+      - bookings
+      - booked revenue
+      - total sales
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What was our total revenue last quarter?"
+      - "Show me sales by region for 2024"
+      - "How much did we book in Q3 2024?"
+
+  - name: revenue_growth_yoy
+    domain: Revenue
+    description: |
+      Year-over-year revenue growth expressed as a percentage. Compares
+      the current period's booked revenue to the same period in the prior
+      year. Finance tracks this as the headline growth metric in every
+      board pack and investor summary. A negative number is a shrink signal
+      and triggers executive review. Calculated only when a full prior-year
+      comparable period exists — do not compute for periods without a
+      prior-year baseline.
+    formula: |
+      SELECT
+        (current_yr.revenue - prior_yr.revenue) / prior_yr.revenue * 100
+      FROM (
+        SELECT SUM(fso.total_amount) AS revenue
+        FROM fact_sales_order fso
+        JOIN dim_date dd ON fso.order_date_id = dd.date_id
+        WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+          AND dd.year = {current_year}
+      ) current_yr,
+      (
+        SELECT SUM(fso.total_amount) AS revenue
+        FROM fact_sales_order fso
+        JOIN dim_date dd ON fso.order_date_id = dd.date_id
+        WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+          AND dd.year = {current_year} - 1
+      ) prior_yr
+    dimensions_allowed:
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_item.category
+      - dim_date.year
+    synonyms:
+      - yoy growth
+      - year over year
+      - annual growth
+      - revenue growth
+      - growth rate
+      - how fast are we growing
+    definition_owner: Finance
+    format: percentage
+    example_questions:
+      - "What was our YoY revenue growth in 2024?"
+      - "How did West region revenue grow compared to last year?"
+      - "Are we growing faster than 2023?"
+
+  - name: average_order_value
+    domain: Revenue
+    description: |
+      Mean total order value across all non-cancelled orders in the period.
+      Sales leadership uses AOV to assess deal quality and pricing discipline.
+      A declining AOV can signal discounting pressure, smaller deal sizes, or
+      a shift in customer mix toward SMB. Finance uses AOV alongside order
+      volume to decompose revenue into size vs. frequency drivers — a key
+      distinction for forecasting and capacity planning.
+    formula: |
+      SELECT AVG(fso.total_amount)
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_customer.industry
+      - dim_date.year
+      - dim_date.quarter
+      - dim_item.category
+    synonyms:
+      - aov
+      - avg order value
+      - mean order size
+      - ticket size
+      - deal size
+      - average deal value
+    definition_owner: Sales
+    format: currency
+    example_questions:
+      - "What is the average order value for Enterprise customers?"
+      - "Has our ticket size changed since last year?"
+      - "Which product category has the highest AOV?"
+
+  - name: revenue_by_segment
+    domain: Revenue
+    description: |
+      Revenue broken out by customer tier — Enterprise, Mid-Market, and SMB.
+      Finance uses this to understand revenue quality and predictability: Enterprise
+      revenue is stickier and higher-margin; SMB is high-volume but more
+      transactional. This view is standard in monthly CFO reporting and is the
+      primary lens for go-to-market investment decisions. Always shown as both
+      absolute dollars and percentage of total revenue.
+    formula: |
+      SELECT
+        dc.customer_segment,
+        SUM(fso.total_amount) AS segment_revenue,
+        SUM(fso.total_amount) / SUM(SUM(fso.total_amount)) OVER () * 100 AS pct_of_total
+      FROM fact_sales_order fso
+      JOIN dim_customer dc ON fso.customer_id = dc.customer_id
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+      GROUP BY dc.customer_segment
+      ORDER BY segment_revenue DESC
+    dimensions_allowed:
+      - dim_customer.customer_segment
+      - dim_customer.region
+      - dim_date.year
+      - dim_date.quarter
+    synonyms:
+      - segment revenue
+      - revenue mix by tier
+      - customer tier revenue
+      - enterprise vs smb
+      - revenue breakdown by segment
+      - tier split
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What share of revenue comes from Enterprise customers?"
+      - "How does SMB revenue compare to Mid-Market?"
+      - "Show me the revenue split by customer tier for 2024"
+
+  # ────────────────────────────────────────────────────────────────
+  # PROFITABILITY DOMAIN
+  # ────────────────────────────────────────────────────────────────
+
+  - name: gross_margin_pct
+    domain: Profitability
+    description: |
+      Gross margin as a percentage of revenue — the most watched profitability
+      metric in Finance. Calculated at the order level using the effective unit
+      cost at the time of the order, not the static list cost from the product
+      catalog. This distinction matters: effective unit cost captures cost
+      fluctuations over time (e.g., the 2025 outdoor furniture cost escalation
+      due to material price shocks). Finance reviews gross margin monthly;
+      a quarter-over-quarter decline in any category triggers a cost review.
+      Line_count is used as a quantity proxy since individual line quantities
+      are not modeled in the fact layer.
+    formula: |
+      SELECT
+        (SUM(fso.total_amount) - SUM(fso.effective_unit_cost * fso.line_count))
+        / SUM(fso.total_amount) * 100
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_item.category
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+    synonyms:
+      - margin
+      - gross margin
+      - profit margin
+      - gp percent
+      - margin percentage
+      - how profitable are we
+    definition_owner: Finance
+    format: percentage
+    example_questions:
+      - "What is our gross margin for Outdoor Furniture in 2025?"
+      - "Which product category has the lowest margin?"
+      - "Has our margin been declining this year?"
+
+  - name: gross_profit
+    domain: Profitability
+    description: |
+      Absolute gross profit in dollars — revenue minus cost of goods sold at
+      the order level. Finance uses gross profit alongside gross margin
+      percentage to size profitability: a high-margin category with low volume
+      may contribute less gross profit dollars than a lower-margin high-volume
+      category. Both views are needed for resource allocation decisions. Gross
+      profit is the primary input to operating income calculations in the
+      monthly P&L. Uses effective unit cost (not catalog cost) to reflect
+      period-accurate cost accounting.
+    formula: |
+      SELECT
+        SUM(fso.total_amount - (fso.effective_unit_cost * fso.line_count))
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_item.category
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+    synonyms:
+      - gp
+      - gross dollars
+      - profit
+      - contribution
+      - gross profit dollars
+      - profit contribution
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What was our gross profit last year?"
+      - "Which region generates the most gross profit dollars?"
+      - "How much profit did we make on Conference Tables in 2024?"
+
+  - name: cogs
+    domain: Profitability
+    description: |
+      Cost of goods sold — the total cost basis of products in non-cancelled
+      orders. Finance uses COGS to track input cost trends and identify when
+      rising costs are eroding margin before it shows up in the P&L.
+      Operations uses COGS by category to flag supplier cost escalations
+      that may require renegotiation. Computed using effective_unit_cost
+      (the period-adjusted cost at time of order), not the static unit_cost
+      in the item catalog, which is critical for accurate period accounting
+      when costs fluctuate mid-year.
+    formula: |
+      SELECT
+        SUM(fso.effective_unit_cost * fso.line_count)
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_item.category
+      - dim_customer.region
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+    synonyms:
+      - cost of goods sold
+      - product cost
+      - cogs spend
+      - input cost
+      - cost base
+      - how much did products cost us
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What was our total COGS in 2025?"
+      - "How has the cost of Outdoor Furniture changed across 2025 quarters?"
+      - "Which category has the highest cost of goods?"
+
+  # ────────────────────────────────────────────────────────────────
+  # CUSTOMER DOMAIN
+  # ────────────────────────────────────────────────────────────────
+
+  - name: active_customer_count
+    domain: Customer
+    description: |
+      Count of distinct customers who placed at least one non-cancelled order
+      in the measurement period. Active is defined operationally as "placed
+      an order" — not by CRM status. This is the denominator in many per-customer
+      metrics and a leading indicator of market penetration. Sales leadership
+      reviews active customer count in weekly pipeline calls to distinguish
+      revenue growth driven by customer acquisition versus wallet-share growth
+      in the existing base. Note: this counts buying customers, not all customers
+      on record (which includes inactive and churned accounts).
+    formula: |
+      SELECT COUNT(DISTINCT fso.customer_id)
+      FROM fact_sales_order fso
+      WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_customer.industry
+    synonyms:
+      - active customers
+      - customers ordering
+      - buying customers
+      - customer count
+      - how many customers do we have
+      - unique buyers
+    definition_owner: Sales
+    format: integer
+    example_questions:
+      - "How many active customers did we have in Q3 2024?"
+      - "How many Enterprise customers placed orders last year?"
+      - "Is our active customer base growing?"
+
+  - name: top_customer_concentration
+    domain: Customer
+    description: |
+      The percentage of total revenue attributable to the top 5 customers by
+      revenue in the period. This is Northwind's primary revenue concentration
+      risk metric. Sales leadership and Finance review this in every QBR: high
+      concentration means losing a single whale customer creates a material
+      revenue hole. The Hilton and Marriott situation (two Enterprise churns in
+      Q4 2024) is exactly the scenario this metric is designed to surface early.
+      Tracked as top-5 by default; the agent can parameterize N on request.
+    formula: |
+      SELECT
+        SUM(top5.revenue) / SUM(all_rev.total_amount) * 100
+      FROM (
+        SELECT fso.customer_id, SUM(fso.total_amount) AS revenue
+        FROM fact_sales_order fso
+        WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+        GROUP BY fso.customer_id
+        ORDER BY revenue DESC
+        LIMIT 5
+      ) top5,
+      (
+        SELECT SUM(total_amount) AS total_amount
+        FROM fact_sales_order
+        WHERE order_status NOT IN ('Cancelled', 'Pending')
+      ) all_rev
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_customer.region
+    synonyms:
+      - customer concentration
+      - top customer share
+      - whale dependence
+      - customer mix risk
+      - how concentrated is our revenue
+      - revenue from top customers
+    definition_owner: Sales
+    format: percentage
+    example_questions:
+      - "What percentage of revenue comes from our top 5 customers?"
+      - "How concentrated is our customer base in the West region?"
+      - "Are we too dependent on a few large customers?"
+
+  - name: customer_churn_count
+    domain: Customer
+    description: |
+      Count of customers with no non-cancelled orders in the current period
+      whose most recent prior order was more than 90 days before the period
+      start. Sales uses this as the primary early-warning metric for account
+      health. The 90-day threshold is Northwind's operational definition of
+      churn — it balances sensitivity (catching real churn early) against
+      false positives (seasonally slow buyers who aren't actually lost).
+      Note: other definitions are valid (60-day, 180-day); always confirm
+      the threshold when answering churn questions. The Hilton and Marriott
+      accounts (both churned Q4 2024) are the canonical examples in this
+      dataset.
+    formula: |
+      SELECT COUNT(DISTINCT dc.customer_id)
+      FROM dim_customer dc
+      WHERE dc.status IN ('Active', 'Churned')
+        AND NOT EXISTS (
+          SELECT 1 FROM fact_sales_order fso
+          JOIN dim_date dd ON fso.order_date_id = dd.date_id
+          WHERE fso.customer_id = dc.customer_id
+            AND fso.order_status NOT IN ('Cancelled', 'Pending')
+            AND dd.date >= CAST('{period_start}' AS DATE)
+        )
+        AND EXISTS (
+          SELECT 1 FROM fact_sales_order fso
+          JOIN dim_date dd ON fso.order_date_id = dd.date_id
+          WHERE fso.customer_id = dc.customer_id
+            AND fso.order_status NOT IN ('Cancelled', 'Pending')
+            AND dd.date < CAST('{period_start}' AS DATE) - INTERVAL 90 DAYS
+        )
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_customer.region
+      - dim_customer.customer_segment
+    synonyms:
+      - churn
+      - churned customers
+      - lost customers
+      - dormant accounts
+      - customers we lost
+      - customer attrition
+    definition_owner: Sales
+    format: integer
+    example_questions:
+      - "How many customers churned in 2024?"
+      - "Which region had the most customer churn last year?"
+      - "Did we lose any Enterprise customers in Q4 2024?"
+
+  - name: repeat_customer_rate
+    domain: Customer
+    description: |
+      The percentage of customers who ordered in the current period who also
+      ordered in the immediately prior period (same granularity — quarter over
+      quarter, or year over year depending on the question). Sales uses repeat
+      rate as a proxy for customer satisfaction and relationship health: a
+      declining repeat rate means we're winning new customers but not retaining
+      them, which is a loyalty and onboarding problem. This is distinct from
+      churn — repeat rate measures active re-purchase behavior, while churn
+      counts definitive losses. Tracked quarterly at the regional and segment
+      level by the VP of Sales.
+    formula: |
+      SELECT
+        COUNT(DISTINCT CASE WHEN prior.customer_id IS NOT NULL THEN curr.customer_id END)
+        * 100.0 / COUNT(DISTINCT curr.customer_id)
+      FROM (
+        SELECT DISTINCT fso.customer_id
+        FROM fact_sales_order fso
+        JOIN dim_date dd ON fso.order_date_id = dd.date_id
+        WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+          AND dd.year = {current_year} AND dd.quarter = {current_quarter}
+      ) curr
+      LEFT JOIN (
+        SELECT DISTINCT fso.customer_id
+        FROM fact_sales_order fso
+        JOIN dim_date dd ON fso.order_date_id = dd.date_id
+        WHERE fso.order_status NOT IN ('Cancelled', 'Pending')
+          AND dd.year = {prior_year} AND dd.quarter = {prior_quarter}
+      ) prior ON curr.customer_id = prior.customer_id
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_customer.region
+      - dim_customer.customer_segment
+    synonyms:
+      - repeat rate
+      - retention
+      - returning customer rate
+      - customer stickiness
+      - re-purchase rate
+      - how many customers came back
+    definition_owner: Sales
+    format: percentage
+    example_questions:
+      - "What percentage of our Q3 2024 customers also ordered in Q2?"
+      - "Is our customer retention improving year over year?"
+      - "Which segment has the highest repeat purchase rate?"
+
+  # ────────────────────────────────────────────────────────────────
+  # OPERATIONAL DOMAIN
+  # ────────────────────────────────────────────────────────────────
+
+  - name: cancellation_rate
+    domain: Operational
+    description: |
+      The percentage of orders that were cancelled in the period. Operations
+      tracks cancellation rate as a quality and supply-chain health indicator —
+      spikes typically signal product defects, supplier failures, or fulfillment
+      breakdowns. A sustained cancellation rate above 5% for any category or
+      supplier triggers a root-cause review. The Q3 2024 spike in Office Seating
+      cancellations (Cascade Manufacturing) is the canonical anomaly in this
+      dataset and the primary example of how this metric surfaces supplier-level
+      problems. Note: 'refund rate' and 'return rate' are used interchangeably
+      with cancellation rate at Northwind, though technically returns are a
+      subset of cancellations.
+    formula: |
+      SELECT
+        COUNT(CASE WHEN fso.order_status = 'Cancelled' THEN 1 END)
+        * 100.0 / COUNT(*) AS cancellation_rate
+      FROM fact_sales_order fso
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+      - dim_item.category
+      - dim_customer.region
+      - dim_customer.customer_segment
+    synonyms:
+      - cancel rate
+      - refund rate
+      - return rate
+      - abandonment rate
+      - order cancellation rate
+      - how many orders were cancelled
+    definition_owner: Operations
+    format: percentage
+    example_questions:
+      - "What is our cancellation rate for Office Seating in Q3 2024?"
+      - "Which product category has the highest return rate?"
+      - "Has our refund rate been unusually high this year?"
+
+  - name: on_time_payment_rate
+    domain: Operational
+    description: |
+      The percentage of paid invoices where payment was received on or before
+      the invoice due date. Finance uses this metric to assess customer payment
+      behavior and the effectiveness of credit terms. A declining on-time rate
+      is an early warning for cash flow problems in the AR portfolio and may
+      indicate customers are facing their own liquidity constraints. Tracked
+      by customer segment — Enterprise customers on Net 45/60 terms are expected
+      to have higher compliance than SMB customers on Net 15. Flagged invoices
+      are escalated to the collections team when on-time rate for a segment
+      drops below 80%.
+    formula: |
+      SELECT
+        COUNT(CASE WHEN fp.payment_date_id <= fi.due_date_id THEN 1 END)
+        * 100.0 / COUNT(fi.invoice_id)
+      FROM fact_invoice fi
+      JOIN fact_payment fp ON fi.invoice_id = fp.invoice_id
+      WHERE fi.status = 'Paid'
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_customer.customer_segment
+      - dim_customer.industry
+      - dim_customer.region
+    synonyms:
+      - on-time payment
+      - payment timeliness
+      - invoice compliance
+      - dso indicator
+      - payment rate
+      - how many customers pay on time
+    definition_owner: Finance
+    format: percentage
+    example_questions:
+      - "What percentage of invoices are paid on time?"
+      - "Do Enterprise customers pay more reliably than SMB?"
+      - "Has payment timeliness changed over the past year?"
+
+  - name: order_volume
+    domain: Operational
+    description: |
+      Count of orders placed in the period, regardless of status. Sales uses
+      order volume alongside average order value to decompose revenue into its
+      two drivers: are we growing because of more deals (volume) or bigger deals
+      (AOV)? Operations uses volume to plan warehouse staffing and fulfillment
+      capacity. Volume is reported raw (all orders) and net (excluding
+      cancellations) depending on the use case — the formula below counts all
+      orders; filter by order_status for net volume. Note: order_volume is
+      distinct from revenue — high volume with declining AOV can mask revenue
+      stagnation.
+    formula: |
+      SELECT COUNT(fso.order_id)
+      FROM fact_sales_order fso
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_date.month
+      - dim_customer.region
+      - dim_customer.customer_segment
+      - dim_item.category
+      - dim_employee.region
+      - dim_employee.employee_id
+    synonyms:
+      - order count
+      - number of orders
+      - deal count
+      - transactions
+      - how many orders
+      - volume
+    definition_owner: Sales
+    format: integer
+    example_questions:
+      - "How many orders did we receive last quarter?"
+      - "Which sales rep had the most orders in 2024?"
+      - "Is order volume growing faster in West or East?"
+
+  - name: average_days_to_pay
+    domain: Operational
+    description: |
+      Average number of days between invoice issuance and payment receipt
+      across all paid invoices in the period. This is Northwind's simplified
+      Days Sales Outstanding (DSO) — a measure of how quickly the company
+      collects cash after billing. Finance tracks DSO in every monthly close
+      as it directly impacts working capital and cash flow forecasting. A
+      rising DSO signals either worsening customer payment behavior or
+      commercial teams over-extending credit terms to close deals. Compare
+      against the customer's contracted payment terms (Net 15/30/45/60) to
+      identify segment-level compliance patterns.
+    formula: |
+      SELECT AVG(DATEDIFF('day', di.date, dp.date))
+      FROM fact_payment fp
+      JOIN fact_invoice fi ON fp.invoice_id = fi.invoice_id
+      JOIN dim_date di ON fi.invoice_date_id = di.date_id
+      JOIN dim_date dp ON fp.payment_date_id = dp.date_id
+    dimensions_allowed:
+      - dim_date.year
+      - dim_date.quarter
+      - dim_customer.customer_segment
+      - dim_customer.industry
+      - dim_customer.region
+    synonyms:
+      - dso
+      - days sales outstanding
+      - payment delay
+      - collection time
+      - how long do customers take to pay
+      - average payment days
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "What is our average DSO this year?"
+      - "How long does it take Enterprise customers to pay versus SMB?"
+      - "Has our average days to pay improved since last year?"
