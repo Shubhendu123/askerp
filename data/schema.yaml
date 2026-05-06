@@ -1,0 +1,425 @@
+tables:
+- name: dim_customer
+  type: dimension
+  description: Customers of Northwind Furniture — companies that purchase office and
+    industrial furniture in bulk.
+  columns:
+  - name: customer_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each customer account.
+  - name: customer_name
+    type: VARCHAR
+    description: Legal name of the customer organization.
+  - name: customer_segment
+    type: VARCHAR
+    description: 'Size-based sales segment: Enterprise, Mid-Market, or SMB.'
+    values:
+    - Enterprise
+    - Mid-Market
+    - SMB
+  - name: industry
+    type: VARCHAR
+    description: The vertical market the customer operates in (e.g., Hospitality,
+      Healthcare).
+    values:
+    - Hospitality
+    - Healthcare
+    - Education
+    - Corporate
+    - Government
+    - Retail
+  - name: region
+    type: VARCHAR
+    description: 'US sales region the customer belongs to: West, East, Central, or
+      South.'
+    values:
+    - West
+    - East
+    - Central
+    - South
+  - name: state
+    type: VARCHAR
+    description: Two-letter US state code where the customer is headquartered.
+  - name: city
+    type: VARCHAR
+    description: City where the customer is headquartered.
+  - name: credit_limit
+    type: DECIMAL
+    description: Maximum outstanding balance (in USD) Northwind will extend to this
+      customer.
+  - name: payment_terms
+    type: VARCHAR
+    description: 'Agreed payment window for invoices: Net 15, Net 30, Net 45, or Net
+      60.'
+    values:
+    - Net 15
+    - Net 30
+    - Net 45
+    - Net 60
+  - name: account_manager_id
+    type: INTEGER
+    foreign_key: dim_employee.employee_id
+    description: The Northwind sales employee assigned to manage this customer relationship.
+  - name: created_date
+    type: DATE
+    description: Date the customer account was first created in the system.
+  - name: status
+    type: VARCHAR
+    description: 'Current account standing: Active (buying), Inactive (dormant), or
+      Churned (lost).'
+    values:
+    - Active
+    - Inactive
+    - Churned
+- name: dim_item
+  type: dimension
+  description: Product catalog of furniture items sold by Northwind Furniture.
+  columns:
+  - name: item_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each product in the catalog.
+  - name: sku
+    type: VARCHAR
+    description: Alphanumeric stock-keeping unit code used for inventory and ordering.
+  - name: item_name
+    type: VARCHAR
+    description: Full product name as shown on quotes and invoices.
+  - name: category
+    type: VARCHAR
+    description: Top-level product category (e.g., Office Seating, Conference Tables).
+    values:
+    - Office Seating
+    - Office Desks
+    - Conference Tables
+    - Outdoor Furniture
+    - Storage
+    - Lighting
+  - name: subcategory
+    type: VARCHAR
+    description: More specific product grouping within a category (e.g., Executive
+      Chairs, Standing Desks).
+  - name: material
+    type: VARCHAR
+    description: Primary material the item is made from.
+    values:
+    - Wood
+    - Metal
+    - Plastic
+    - Upholstered
+    - Mixed
+  - name: unit_cost
+    type: DECIMAL
+    description: What it costs Northwind to produce or acquire one unit of this item
+      (in USD).
+  - name: unit_price
+    type: DECIMAL
+    description: Standard list price charged to customers for one unit (in USD).
+  - name: supplier
+    type: VARCHAR
+    description: Name of the external vendor or manufacturer that supplies this item.
+  - name: lead_time_days
+    type: INTEGER
+    description: Number of days from order placement to item availability (manufacturing
+      + shipping).
+  - name: status
+    type: VARCHAR
+    description: Whether the item is currently sold (Active) or no longer offered
+      (Discontinued).
+    values:
+    - Active
+    - Discontinued
+- name: dim_employee
+  type: dimension
+  description: Northwind Furniture sales team members, including reps, managers, and
+    VPs.
+  columns:
+  - name: employee_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each employee.
+  - name: employee_name
+    type: VARCHAR
+    description: Full name of the employee.
+  - name: role
+    type: VARCHAR
+    description: 'Job title within the sales hierarchy: Sales Rep, Sales Manager,
+      or VP Sales.'
+    values:
+    - Sales Rep
+    - Sales Manager
+    - VP Sales
+  - name: region
+    type: VARCHAR
+    description: The US sales territory this employee is responsible for. National
+      applies to VP-level roles.
+    values:
+    - West
+    - East
+    - Central
+    - South
+    - National
+  - name: manager_id
+    type: INTEGER
+    nullable: true
+    foreign_key: dim_employee.employee_id
+    description: employee_id of this person's direct manager. Null for the top of
+      the hierarchy.
+  - name: hire_date
+    type: DATE
+    description: Date the employee joined Northwind Furniture.
+  - name: status
+    type: VARCHAR
+    description: Whether the employee is currently employed (Active) or has left (Inactive).
+    values:
+    - Active
+    - Inactive
+- name: dim_location
+  type: dimension
+  description: Physical locations operated by Northwind Furniture, including warehouses,
+    showrooms, and HQ.
+  columns:
+  - name: location_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each Northwind facility.
+  - name: location_name
+    type: VARCHAR
+    description: Descriptive name of the facility (e.g., Dallas Distribution Center).
+  - name: location_type
+    type: VARCHAR
+    description: 'Type of facility: Warehouse (fulfillment), Showroom (sales), or
+      HQ (headquarters).'
+    values:
+    - Warehouse
+    - Showroom
+    - HQ
+  - name: region
+    type: VARCHAR
+    description: US sales region this location serves.
+    values:
+    - West
+    - East
+    - Central
+    - South
+  - name: state
+    type: VARCHAR
+    description: Two-letter US state code where this facility is located.
+  - name: city
+    type: VARCHAR
+    description: City where this facility is located.
+  - name: capacity_units
+    type: INTEGER
+    description: Maximum number of furniture units this location can store at one
+      time.
+- name: dim_date
+  type: dimension
+  description: Calendar date dimension covering all dates relevant to Northwind's
+    transaction history.
+  columns:
+  - name: date_id
+    type: INTEGER
+    primary_key: true
+    description: Date key in YYYYMMDD format (e.g., 20240315 for March 15, 2024).
+  - name: date
+    type: DATE
+    description: The actual calendar date.
+  - name: day_of_week
+    type: VARCHAR
+    description: Full name of the day (e.g., Monday, Tuesday).
+  - name: day_of_month
+    type: INTEGER
+    description: Numeric day within the month, from 1 to 31.
+  - name: month
+    type: INTEGER
+    description: Numeric month of the year, from 1 (January) to 12 (December).
+  - name: month_name
+    type: VARCHAR
+    description: Full name of the month (e.g., January, February).
+  - name: quarter
+    type: INTEGER
+    description: 'Fiscal/calendar quarter: 1, 2, 3, or 4.'
+  - name: year
+    type: INTEGER
+    description: Four-digit calendar year (e.g., 2024).
+  - name: is_weekend
+    type: BOOLEAN
+    description: True if the date falls on a Saturday or Sunday.
+  - name: is_holiday
+    type: BOOLEAN
+    description: True if the date is a US federal holiday.
+- name: fact_sales_order
+  type: fact
+  description: One row per sales order placed by a customer. The primary transactional
+    record for revenue tracking.
+  columns:
+  - name: order_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each sales order.
+  - name: order_date_id
+    type: INTEGER
+    foreign_key: dim_date.date_id
+    description: Date the order was placed, as a key into the date dimension (YYYYMMDD).
+  - name: customer_id
+    type: INTEGER
+    foreign_key: dim_customer.customer_id
+    description: The customer who placed this order.
+  - name: employee_id
+    type: INTEGER
+    foreign_key: dim_employee.employee_id
+    description: The sales rep credited with closing this order.
+  - name: location_id
+    type: INTEGER
+    foreign_key: dim_location.location_id
+    description: The warehouse or facility responsible for fulfilling this order.
+  - name: order_status
+    type: VARCHAR
+    description: 'Current lifecycle stage of the order: Pending, Confirmed, Shipped,
+      Delivered, or Cancelled.'
+    values:
+    - Pending
+    - Confirmed
+    - Shipped
+    - Delivered
+    - Cancelled
+  - name: total_amount
+    type: DECIMAL
+    description: Total value of the order in USD, summing all line items before tax.
+  - name: line_count
+    type: INTEGER
+    description: Number of distinct product lines included in this order.
+  - name: primary_item_category
+    type: VARCHAR
+    description: Category of the primary (first) item in the order — used to attribute
+      margin and anomaly analysis to a product category.
+  - name: effective_unit_cost
+    type: DECIMAL
+    description: Effective unit cost at the time of the order, accounting for cost
+      fluctuations over time (e.g., Outdoor Furniture quarterly cost escalation in
+      2025).
+  - name: effective_gross_margin_pct
+    type: DECIMAL
+    description: Gross margin percentage at the time of the order ((price - cost)
+      / price × 100), reflecting period-specific cost fluctuations.
+- name: fact_invoice
+  type: fact
+  description: One row per invoice issued to a customer. Invoices are generated from
+    confirmed sales orders.
+  columns:
+  - name: invoice_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each invoice.
+  - name: order_id
+    type: INTEGER
+    foreign_key: fact_sales_order.order_id
+    description: The sales order this invoice was generated from.
+  - name: invoice_date_id
+    type: INTEGER
+    foreign_key: dim_date.date_id
+    description: Date the invoice was issued, as a key into the date dimension (YYYYMMDD).
+  - name: due_date_id
+    type: INTEGER
+    foreign_key: dim_date.date_id
+    description: Payment due date based on the customer's payment terms, as a key
+      into the date dimension.
+  - name: customer_id
+    type: INTEGER
+    foreign_key: dim_customer.customer_id
+    description: The customer this invoice was billed to.
+  - name: invoice_amount
+    type: DECIMAL
+    description: Total invoice value in USD, before tax.
+  - name: tax_amount
+    type: DECIMAL
+    description: Sales tax applied to this invoice in USD.
+  - name: status
+    type: VARCHAR
+    description: 'Current payment status: Open (awaiting payment), Paid, Overdue,
+      or Voided.'
+    values:
+    - Open
+    - Paid
+    - Overdue
+    - Voided
+- name: fact_payment
+  type: fact
+  description: One row per payment received from a customer against an invoice.
+  columns:
+  - name: payment_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each payment transaction.
+  - name: invoice_id
+    type: INTEGER
+    foreign_key: fact_invoice.invoice_id
+    description: The invoice this payment is being applied to.
+  - name: payment_date_id
+    type: INTEGER
+    foreign_key: dim_date.date_id
+    description: Date the payment was received, as a key into the date dimension (YYYYMMDD).
+  - name: customer_id
+    type: INTEGER
+    foreign_key: dim_customer.customer_id
+    description: The customer who made this payment.
+  - name: payment_amount
+    type: DECIMAL
+    description: Amount received in this payment transaction, in USD.
+  - name: payment_method
+    type: VARCHAR
+    description: 'How the customer paid: Wire transfer, ACH, Check, or Credit Card.'
+    values:
+    - Wire
+    - ACH
+    - Check
+    - Credit Card
+- name: fact_gl_entry
+  type: fact
+  description: General ledger journal entries recording the financial impact of all
+    transactions. The accounting source of truth.
+  columns:
+  - name: gl_entry_id
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each general ledger entry.
+  - name: posting_date_id
+    type: INTEGER
+    foreign_key: dim_date.date_id
+    description: Date this entry was posted to the ledger, as a key into the date
+      dimension (YYYYMMDD).
+  - name: account_code
+    type: VARCHAR
+    description: Chart of accounts code and label (e.g., 4000-Revenue, 5000-COGS,
+      1200-AR).
+  - name: account_type
+    type: VARCHAR
+    description: 'High-level accounting classification for the account: Revenue, COGS,
+      Asset, Liability, or Expense.'
+    values:
+    - Revenue
+    - COGS
+    - Asset
+    - Liability
+    - Expense
+  - name: debit_amount
+    type: DECIMAL
+    description: Amount debited in this entry in USD. Zero if this is a credit-only
+      entry.
+  - name: credit_amount
+    type: DECIMAL
+    description: Amount credited in this entry in USD. Zero if this is a debit-only
+      entry.
+  - name: source_type
+    type: VARCHAR
+    description: 'What business event generated this entry: an Invoice, a Payment,
+      or a manual Adjustment.'
+    values:
+    - Invoice
+    - Payment
+    - Adjustment
+  - name: source_id
+    type: INTEGER
+    description: The ID of the originating record — references invoice_id or payment_id
+      depending on source_type.
