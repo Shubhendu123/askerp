@@ -41,3 +41,4 @@ data/raw/
 data/verify_output.txt
 data/load_audit.log
 data/northwind.db
+data/metrics_verify_output.txt
