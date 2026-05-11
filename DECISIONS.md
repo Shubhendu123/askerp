@@ -136,3 +136,30 @@ This document captures the meaningful decisions made during the build, in the fo
 
 "On my eval set, dense-only retrieval achieved 80% top-1 accuracy on hard multi-concept queries, 100% graceful degradation on edge cases, and 1-2 real misses. The 0.7 confidence threshold I started with was wrong for the embedding model — switched to relative confidence between top-1 and top-2. Day 8's hybrid retrieval, reranking, and example-question weighting target the specific failure modes I observed, not theoretical problems."
 
+
+### D-014: Hybrid retrieval (BM25 + dense) via Reciprocal Rank Fusion
+**Context:** Day 7 dense-only retrieval missed Q14 ("Which suppliers had quality issues?") because the connection between "quality issues" and "cancellations" requires domain knowledge not in technical descriptions.
+**Options considered:**
+- Dense only (Day 7 baseline): captures synonyms but misses exact-match terms and out-of-vocabulary domain phrases.
+- BM25 only: captures keywords but misses synonyms (e.g., "top line" → "revenue").
+- Hybrid via RRF (Reciprocal Rank Fusion): combines rankings from both retrievers without needing to normalize scores across retrievers.
+**Decision:** Hybrid via RRF with k=60 constant.
+**Tradeoffs:** Doubles indexing memory (BM25 + dense embeddings). Slightly more complex to debug — when retrieval is wrong, need to inspect both sub-rankings. In exchange: BM25 catches exact-match terms (table names, SKUs, supplier names) that dense embeddings dilute. Production NL→SQL systems (Snowflake Cortex, Cube) use hybrid for this exact reason.
+
+### D-015: Cross-encoder reranking on top-10 fused results
+**Context:** Day 7 query "Show me sales" returned plausible but ambiguous candidates within 10% of each other (revenue, order_volume, fact_sales_order). Bi-encoder retrieval cannot disambiguate at retrieval time.
+**Options considered:**
+- No reranker: accept ambiguity at retrieval time.
+- LLM-based reranker (use Claude to re-score): expensive, slow.
+- Cross-encoder (ms-marco-MiniLM-L-6-v2): small, fast, runs on CPU.
+**Decision:** Cross-encoder on top-10 fused results.
+**Tradeoffs:** +50-100ms latency per query (10 cross-encoder passes vs zero before). In exchange: cross-encoder uses full attention between query and document — much more precise for ambiguous cases than cosine similarity over independently-embedded vectors.
+
+### D-016: Relative confidence (top1-top2 gap) over absolute thresholds
+**Context:** Day 7 eval showed all-MiniLM-L6-v2 produces scores in 0.2-0.7 range for short-query-long-doc cases. The 0.7 absolute threshold was wrong — no query crossed it even when retrieval was bullseye (Q15 hit correct at 0.60).
+**Options considered:**
+- Stick with absolute threshold: easy but uncalibrated.
+- Per-model threshold tuning: requires manual calibration per model.
+- Relative confidence (gap between top-1 and top-2): self-calibrating.
+**Decision:** Relative confidence with HIGH/MEDIUM/LOW/VERY_LOW bands based on top-1 score AND top1-top2 gap. Cross-encoder logits sigmoid-normalised to [0,1] before band computation.
+**Tradeoffs:** Slightly more complex to explain. In exchange: works across embedding models without retuning. Correctly classifies out-of-domain queries (Q17 "weather") as VERY_LOW even when top-1 absolute score isn't pathologically low.
