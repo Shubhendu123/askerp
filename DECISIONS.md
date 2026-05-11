@@ -100,3 +100,39 @@ This document captures the meaningful decisions made during the build, in the fo
 **Tradeoffs:** Each chunk is larger (~500-800 chars) so embedding the whole corpus takes more compute upfront. In exchange: retrieved chunks are coherent, complete units. SQL generation never sees a half-table context. For schemas with 1000+ tables, per-domain pre-filtering would be the next step.
 
 (More decisions will be added as we build.)
+
+## Stress-Test Record: Day 7 Naive Dense Retriever
+
+### Eval setup
+20 hand-curated questions across 4 difficulty tiers (5 each: EASY, MEDIUM, HARD, EDGE). Retrieval against schema (9 tables) + metrics (15) using all-MiniLM-L6-v2 + cosine similarity. No reranking, no BM25, no query expansion.
+
+### Headline numbers
+- Top-1 accuracy on HARD (correct metric/table retrieved): 4/5 = 80%
+- Top-1 accuracy on EDGE (graceful failure behavior): 5/5 = 100%
+- Real misses on meaningful queries: ~1-2 out of 15
+- Avg retrieval latency: 134ms per query
+
+### Failure modes observed (each maps to a Day 8 design target)
+
+**1. Universal score deflation (calibration).** No query scored above 0.7 even when retrieval was correct (Q15 hit bullseye at 0.60). all-MiniLM-L6-v2 produces calibrated scores in 0.2-0.7 range for short-query-long-doc cases. The 0.7 absolute threshold was wrong — relative confidence (top-1 vs top-2 gap) is the better signal.
+
+**2. Domain-knowledge gap (Q14).** "Which suppliers had quality issues" retrieved 'cogs' instead of 'cancellation_rate'. The connection "quality issues → cancellations → supplier" requires domain knowledge not present in technical descriptions. Fix: weight example_questions and synonyms in retrieval embedding.
+
+**3. Semantic ambiguity (Q18).** "Show me sales" returned plausible candidates within 10% of each other (revenue, order count, fact table). Bi-encoder cannot disambiguate. Fix: cross-encoder reranker.
+
+**4. Entity-level queries (Q16, deferred).** "Tell me about Hilton" — Hilton is a data value, not a schema element. Schema RAG fundamentally cannot answer this. Out of Day 8 scope; addressed via separate entity retriever in Week 3.
+
+**5. Graceful degradation (Q17, Q20, Q19).** Out-of-domain and empty queries scored 0.06-0.27 across all candidates. This is correct behavior — gives the planner a clear signal to refuse. Confidence-based refusal is graceful degradation, not failure.
+
+### Day 8 design targets (driven by these observations)
+
+- Hybrid retrieval (BM25 + dense) — addresses #2
+- Cross-encoder reranker — addresses #3
+- Query expansion via synonyms — addresses #2
+- Relative confidence thresholds — addresses #1
+- Entity retriever — deferred to Week 3 (separate architectural pattern)
+
+### Honest framing for interviews
+
+"On my eval set, dense-only retrieval achieved 80% top-1 accuracy on hard multi-concept queries, 100% graceful degradation on edge cases, and 1-2 real misses. The 0.7 confidence threshold I started with was wrong for the embedding model — switched to relative confidence between top-1 and top-2. Day 8's hybrid retrieval, reranking, and example-question weighting target the specific failure modes I observed, not theoretical problems."
+
