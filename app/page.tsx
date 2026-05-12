@@ -15,9 +15,9 @@ export default function Home() {
         <p className="mt-2 text-sm text-muted-foreground">
           Built with Next.js, DuckDB, and Claude. Powered by natural language.
         </p>
-        <Button className="mt-8" asChild>
-          <Link href="/chat">Start chatting</Link>
-        </Button>
+        <Link href="/chat">
+          <Button className="mt-8">Start chatting</Button>
+        </Link>
       </main>
 
       <footer className="py-6 px-4">

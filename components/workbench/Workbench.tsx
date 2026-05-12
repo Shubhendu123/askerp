@@ -238,7 +238,7 @@ export default function Workbench() {
               📊
             </p>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Ask anything about Northwind Furniture's ERP data
+              Ask anything about Northwind Furniture&apos;s ERP data
             </p>
             <p
               className="text-xs mt-1"
