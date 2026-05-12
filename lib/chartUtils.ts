@@ -60,6 +60,12 @@ export function canTrend(columns: string[], rows: unknown[][]): boolean {
   return hasTimeCol && hasNumber;
 }
 
+// ── Drivers ───────────────────────────────────────────────────────────────────
+// Activates when: a metric was identified and data exists.
+export function canDrivers(metricUsed: string | null, hasData: boolean): boolean {
+  return hasData && metricUsed !== null;
+}
+
 export interface TrendRow {
   period: string;
   value: number;

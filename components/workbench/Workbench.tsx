@@ -6,7 +6,8 @@ import InsightTabs from "./InsightTabs";
 import ChangeTab from "./ChangeTab";
 import ContributionTab from "./ContributionTab";
 import TrendTab from "./TrendTab";
-import { canContribute, canTrend } from "@/lib/chartUtils";
+import DriversTab from "./DriversTab";
+import { canContribute, canTrend, canDrivers } from "@/lib/chartUtils";
 
 export interface AskResponse {
   question: string;
@@ -258,7 +259,7 @@ export default function Workbench() {
             change: true,
             contribution: hasData && canContribute(cols, rows),
             trend: hasData && canTrend(cols, rows),
-            drivers: false,
+            drivers: canDrivers(response?.metric_used ?? null, hasData),
           };
           // If active tab becomes disabled (e.g. new query), fall back to change
           const safeTab = enabledTabs[activeTab] ? activeTab : "change";
@@ -283,6 +284,9 @@ export default function Workbench() {
               )}
               {safeTab === "trend" && response && (
                 <TrendTab response={response} />
+              )}
+              {safeTab === "drivers" && response && (
+                <DriversTab response={response} />
               )}
             </>
           );
