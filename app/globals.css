@@ -4,6 +4,21 @@
 
 @layer base {
   :root {
+    /* AskERP Workbench palette */
+    --bg-page: #FAF8F3;
+    --bg-surface: #FFFFFF;
+    --bg-header: #1F1D2A;
+    --bg-accent: #EFE9DB;
+    --text-primary: #1F1D2A;
+    --text-secondary: #6B665D;
+    --text-tertiary: #A39B8E;
+    --accent-primary: #4D5BC9;
+    --accent-hover: #3D49A6;
+    --sentiment-positive: #4A9B5E;
+    --sentiment-negative: #C13C3C;
+    --sentiment-neutral: #8A8275;
+    --divider: #E8E2D4;
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;

@@ -204,6 +204,7 @@ export async function POST(req: NextRequest) {
     retrieved,
     sql,
     metric_used: sqlResult.metric_used ?? null,
+    sentiment: sqlResult.sentiment ?? null,
     tables_referenced: sqlResult.tables_referenced ?? [],
     reasoning: sqlResult.reasoning ?? null,
     columns: execResult.columns,

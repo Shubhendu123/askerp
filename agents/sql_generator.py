@@ -66,10 +66,17 @@ Output JSON with exactly these keys:
 {
   "sql": "SELECT ...",
   "metric_used": "metric_name or null",
+  "sentiment": "positive or negative or none",
   "tables_referenced": ["table1", "table2"],
   "reasoning": "one sentence",
   "confidence": "HIGH or MEDIUM or LOW"
 }
+
+For sentiment: if a metric is used, derive it from the metric's sentiment field in the retrieved context.
+Use "positive" for metrics where higher is better (revenue, margin, active customers),
+"negative" for metrics where higher is worse (churn, cancellation, days to pay),
+"none" for neutral or directional metrics (growth rate, segment breakdown).
+If no metric is used, set "none".
 
 Output ONLY the JSON object. No markdown, no explanation."""
 
@@ -80,6 +87,7 @@ _FEW_SHOT_EXAMPLES = [
         "answer": json.dumps({
             "sql": "SELECT SUM(fso.total_amount) AS total_revenue FROM fact_sales_order fso JOIN dim_date dd ON fso.order_date_id = dd.date_id WHERE fso.order_status NOT IN ('Cancelled', 'Pending') AND dd.year = 2024",
             "metric_used": "total_revenue",
+            "sentiment": "positive",
             "tables_referenced": ["fact_sales_order", "dim_date"],
             "reasoning": "Sum total_amount for confirmed/delivered orders in 2024 using dim_date year filter.",
             "confidence": "HIGH"
@@ -90,6 +98,7 @@ _FEW_SHOT_EXAMPLES = [
         "answer": json.dumps({
             "sql": "SELECT dc.customer_name, SUM(fso.total_amount) AS revenue FROM fact_sales_order fso JOIN dim_customer dc ON fso.customer_id = dc.customer_id JOIN dim_date dd ON fso.order_date_id = dd.date_id WHERE fso.order_status NOT IN ('Cancelled', 'Pending') AND dd.year = 2025 AND dd.quarter = 4 GROUP BY dc.customer_name ORDER BY revenue DESC LIMIT 5",
             "metric_used": "total_revenue",
+            "sentiment": "positive",
             "tables_referenced": ["fact_sales_order", "dim_customer", "dim_date"],
             "reasoning": "Join customer dimension, group by name, order by revenue descending, limit 5.",
             "confidence": "HIGH"
@@ -100,9 +109,32 @@ _FEW_SHOT_EXAMPLES = [
         "answer": json.dumps({
             "sql": "SELECT ROUND((SUM(fso.total_amount) - SUM(fso.effective_unit_cost * fso.line_count)) / SUM(fso.total_amount) * 100, 2) AS gross_margin_pct FROM fact_sales_order fso JOIN dim_date dd ON fso.order_date_id = dd.date_id WHERE fso.order_status NOT IN ('Cancelled', 'Pending') AND fso.primary_item_category = 'Outdoor Furniture' AND dd.year = 2025",
             "metric_used": "gross_margin_pct",
+            "sentiment": "positive",
             "tables_referenced": ["fact_sales_order", "dim_date"],
             "reasoning": "Filter to Outdoor Furniture using primary_item_category, apply gross margin formula.",
             "confidence": "HIGH"
+        })
+    },
+    {
+        "question": "Cancellation rate by quarter in 2024",
+        "answer": json.dumps({
+            "sql": "SELECT dd.quarter, ROUND(COUNT(CASE WHEN fso.order_status = 'Cancelled' THEN 1 END) * 100.0 / COUNT(*), 2) AS cancellation_rate_pct FROM fact_sales_order fso JOIN dim_date dd ON fso.order_date_id = dd.date_id WHERE dd.year = 2024 GROUP BY dd.quarter ORDER BY dd.quarter",
+            "metric_used": "cancellation_rate",
+            "sentiment": "negative",
+            "tables_referenced": ["fact_sales_order", "dim_date"],
+            "reasoning": "Count cancelled orders as pct of all orders, grouped by quarter.",
+            "confidence": "HIGH"
+        })
+    },
+    {
+        "question": "Which customers churned in late 2024?",
+        "answer": json.dumps({
+            "sql": "SELECT dc.customer_name, MAX(dd.date) AS last_order_date FROM fact_sales_order fso JOIN dim_customer dc ON fso.customer_id = dc.customer_id JOIN dim_date dd ON fso.order_date_id = dd.date_id GROUP BY dc.customer_name HAVING MAX(dd.date) < '2024-11-01' AND MAX(dd.date) > '2024-06-01' ORDER BY last_order_date DESC LIMIT 20",
+            "metric_used": "customer_churn_count",
+            "sentiment": "negative",
+            "tables_referenced": ["fact_sales_order", "dim_customer", "dim_date"],
+            "reasoning": "Find customers whose last order was between mid-2024 and Nov 2024, indicating churn.",
+            "confidence": "MEDIUM"
         })
     },
 ]

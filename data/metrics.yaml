@@ -31,6 +31,7 @@ metrics:
 
   - name: total_revenue
     domain: Revenue
+    sentiment: positive
     description: |
       Booked revenue from sales orders, recognized at order confirmation.
       Includes the value of all confirmed and delivered orders. Excludes
@@ -67,6 +68,7 @@ metrics:
 
   - name: revenue_growth_yoy
     domain: Revenue
+    sentiment: none
     description: |
       Year-over-year revenue growth expressed as a percentage. Compares
       the current period's booked revenue to the same period in the prior
@@ -113,6 +115,7 @@ metrics:
 
   - name: average_order_value
     domain: Revenue
+    sentiment: positive
     description: |
       Mean total order value across all non-cancelled orders in the period.
       Sales leadership uses AOV to assess deal quality and pricing discipline.
@@ -147,6 +150,7 @@ metrics:
 
   - name: revenue_by_segment
     domain: Revenue
+    sentiment: none
     description: |
       Revenue broken out by customer tier — Enterprise, Mid-Market, and SMB.
       Finance uses this to understand revenue quality and predictability: Enterprise
@@ -189,6 +193,7 @@ metrics:
 
   - name: gross_margin_pct
     domain: Profitability
+    sentiment: positive
     description: |
       Gross margin as a percentage of revenue — the most watched profitability
       metric in Finance. Calculated at the order level using the effective unit
@@ -228,6 +233,7 @@ metrics:
 
   - name: gross_profit
     domain: Profitability
+    sentiment: positive
     description: |
       Absolute gross profit in dollars — revenue minus cost of goods sold at
       the order level. Finance uses gross profit alongside gross margin
@@ -265,6 +271,7 @@ metrics:
 
   - name: cogs
     domain: Profitability
+    sentiment: negative
     description: |
       Cost of goods sold — the total cost basis of products in non-cancelled
       orders. Finance uses COGS to track input cost trends and identify when
@@ -305,6 +312,7 @@ metrics:
 
   - name: active_customer_count
     domain: Customer
+    sentiment: positive
     description: |
       Count of distinct customers who placed at least one non-cancelled order
       in the measurement period. Active is defined operationally as "placed
@@ -341,6 +349,7 @@ metrics:
 
   - name: top_customer_concentration
     domain: Customer
+    sentiment: negative
     description: |
       The percentage of total revenue attributable to the top 5 customers by
       revenue in the period. This is Northwind's primary revenue concentration
@@ -385,6 +394,7 @@ metrics:
 
   - name: customer_churn_count
     domain: Customer
+    sentiment: negative
     description: |
       Count of customers with no non-cancelled orders in the current period
       whose most recent prior order was more than 90 days before the period
@@ -435,6 +445,7 @@ metrics:
 
   - name: repeat_customer_rate
     domain: Customer
+    sentiment: positive
     description: |
       The percentage of customers who ordered in the current period who also
       ordered in the immediately prior period (same granularity — quarter over
@@ -488,6 +499,7 @@ metrics:
 
   - name: cancellation_rate
     domain: Operational
+    sentiment: negative
     description: |
       The percentage of orders that were cancelled in the period. Operations
       tracks cancellation rate as a quality and supply-chain health indicator —
@@ -527,6 +539,7 @@ metrics:
 
   - name: on_time_payment_rate
     domain: Operational
+    sentiment: positive
     description: |
       The percentage of paid invoices where payment was received on or before
       the invoice due date. Finance uses this metric to assess customer payment
@@ -566,6 +579,7 @@ metrics:
 
   - name: order_volume
     domain: Operational
+    sentiment: positive
     description: |
       Count of orders placed in the period, regardless of status. Sales uses
       order volume alongside average order value to decompose revenue into its
@@ -604,6 +618,7 @@ metrics:
 
   - name: average_days_to_pay
     domain: Operational
+    sentiment: negative
     description: |
       Average number of days between invoice issuance and payment receipt
       across all paid invoices in the period. This is Northwind's simplified

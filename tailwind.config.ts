@@ -43,6 +43,22 @@ const config: Config = {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        // AskERP Workbench palette
+        wb: {
+          page:     "var(--bg-page)",
+          surface:  "var(--bg-surface)",
+          header:   "var(--bg-header)",
+          accent:   "var(--bg-accent)",
+          divider:  "var(--divider)",
+          primary:  "var(--text-primary)",
+          secondary:"var(--text-secondary)",
+          tertiary: "var(--text-tertiary)",
+          blue:     "var(--accent-primary)",
+          "blue-hover": "var(--accent-hover)",
+          positive: "var(--sentiment-positive)",
+          negative: "var(--sentiment-negative)",
+          neutral:  "var(--sentiment-neutral)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

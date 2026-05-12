@@ -199,3 +199,29 @@ This document captures the meaningful decisions made during the build, in the fo
 
 **Decision:** Use @duckdb/node-api with `serverComponentsExternalPackages: ['@duckdb/node-api']` in next.config.mjs.
 **Tradeoffs:** Requires Next.js config change to prevent webpack from bundling the native addon. DuckDB DECIMAL values return as `{value: BigInt, scale: number}` objects requiring custom deserialization in a `sanitize()` helper. Read-only mode (access_mode: "READ_ONLY") protects the data file from accidental mutation.
+
+---
+
+## D-020: Workbench layout over conversational chat
+
+**Context:** Day 9 UI direction.
+**Options considered:**
+- Conversational chat (industry-standard, easy multi-turn)
+- Workbench with insight tabs (Auto Analysis pattern, deep-dive feel)
+- Hybrid (chat thread with rich cards)
+
+**Decision:** Workbench layout with warm palette inspired by Auto Analysis (Crux), adapted for AskERP. Left sidebar holds history + input; main area has dark AnalysisHeader, tab strip, and Change tab with a two-column insights/data layout.
+**Tradeoffs:** Multi-turn requires the sidebar to load past questions and re-render the workbench. In exchange: each question gets full screen real estate for tabbed depth (Change/Contribution/Trend/Drivers). Aligns with how analyst tools work (Tableau, ThoughtSpot, Auto Analysis).
+
+---
+
+## D-021: Sentiment metadata on metrics for narration tone
+
+**Context:** Growth in revenue is favorable; growth in refunds is unfavorable. Without metadata, every increase is implicitly "good" in narration.
+**Options considered:**
+- Hardcode in narrator (brittle)
+- Infer from metric description via LLM (slow, costs tokens)
+- Explicit metadata field (deterministic)
+
+**Decision:** Add `sentiment` field (positive/negative/none) to each metric in data/metrics.yaml.
+**Tradeoffs:** Requires per-metric curation. In exchange: narration tone and badge colors are deterministic, fast, and auditable. Same pattern as Auto Analysis's "Sentiment" configuration. The SQL generator receives this via retrieved context and echoes it back in the response JSON.
