@@ -4,6 +4,9 @@ import { useState, useRef } from "react";
 import AnalysisHeader from "./AnalysisHeader";
 import InsightTabs from "./InsightTabs";
 import ChangeTab from "./ChangeTab";
+import ContributionTab from "./ContributionTab";
+import TrendTab from "./TrendTab";
+import { canContribute, canTrend } from "@/lib/chartUtils";
 
 export interface AskResponse {
   question: string;
@@ -41,6 +44,7 @@ export default function Workbench() {
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [input, setInput] = useState("");
+  const [activeTab, setActiveTab] = useState("change");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   async function ask(question: string) {
@@ -51,6 +55,7 @@ export default function Workbench() {
     setActiveQuestion(q);
     setResponse(null);
     setInput("");
+    setActiveTab("change");
 
     if (!history.includes(q)) {
       setHistory((h) => [q, ...h].slice(0, 8));
@@ -245,17 +250,43 @@ export default function Workbench() {
         )}
 
         {/* Analysis output */}
-        {(response || loading) && (
-          <>
-            <AnalysisHeader
-              response={response}
-              loading={loading}
-              activeQuestion={activeQuestion}
-            />
-            <InsightTabs />
-            <ChangeTab response={response} loading={loading} />
-          </>
-        )}
+        {(response || loading) && (() => {
+          const cols = response?.columns ?? [];
+          const rows = response?.rows ?? [];
+          const hasData = !response?.error && cols.length > 0 && rows.length > 0;
+          const enabledTabs: Record<string, boolean> = {
+            change: true,
+            contribution: hasData && canContribute(cols, rows),
+            trend: hasData && canTrend(cols, rows),
+            drivers: false,
+          };
+          // If active tab becomes disabled (e.g. new query), fall back to change
+          const safeTab = enabledTabs[activeTab] ? activeTab : "change";
+
+          return (
+            <>
+              <AnalysisHeader
+                response={response}
+                loading={loading}
+                activeQuestion={activeQuestion}
+              />
+              <InsightTabs
+                activeTab={safeTab}
+                onTabChange={setActiveTab}
+                enabledTabs={enabledTabs}
+              />
+              {safeTab === "change" && (
+                <ChangeTab response={response} loading={loading} />
+              )}
+              {safeTab === "contribution" && response && (
+                <ContributionTab response={response} />
+              )}
+              {safeTab === "trend" && response && (
+                <TrendTab response={response} />
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
