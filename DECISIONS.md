@@ -163,3 +163,13 @@ This document captures the meaningful decisions made during the build, in the fo
 - Relative confidence (gap between top-1 and top-2): self-calibrating.
 **Decision:** Relative confidence with HIGH/MEDIUM/LOW/VERY_LOW bands based on top-1 score AND top1-top2 gap. Cross-encoder logits sigmoid-normalised to [0,1] before band computation.
 **Tradeoffs:** Slightly more complex to explain. In exchange: works across embedding models without retuning. Correctly classifies out-of-domain queries (Q17 "weather") as VERY_LOW even when top-1 absolute score isn't pathologically low.
+
+### D-017: Accept Q11 regression in hybrid retriever; defer fix to planner agent
+**Context:** Day 8 hybrid retriever (BM25 + RRF + cross-encoder reranker) improved 2 queries (Q7, Q14) but regressed Q11 ("Why did West region revenue drop in Q4 2024?"). Naive correctly returned revenue_growth_yoy; hybrid returned top_customer_concentration.
+**Root cause:** Q11 is a compound query asking about (a) revenue, (b) a specific region, (c) a specific time period, AND (d) causal reasoning. BM25 over-weighted "West" and "Q4" lexically; the metric description for top_customer_concentration explicitly references the Hilton/Marriott Q4 2024 whale-churn scenario in the West. The hybrid retriever correctly identified a relevant story but the wrong primary metric.
+**Options considered:**
+- Tune BM25 weights down → likely regresses Q14 (the supplier fix that BM25 enabled).
+- Add query rewriting via LLM before retrieval → moves complexity into Week 3 anyway.
+- Accept the regression; let the Week 3 planner agent decompose compound queries.
+**Decision:** Accept. Compound queries are a planner-layer problem, not a retrieval-layer problem.
+**Tradeoffs:** Q11 retrieves a defensible-but-not-primary metric in single-pass retrieval. The Week 3 planner will decompose: "first what's the metric (revenue)? Then what's the breakdown (region, time)? Then what explains the result (concentration, churn)?" Each sub-query goes through retrieval separately. This is the correct architectural location for compound-query handling — retrieval optimizes for direct-match queries, planner handles compound intent.
