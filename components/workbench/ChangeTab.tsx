@@ -256,24 +256,47 @@ export default function ChangeTab({ response, loading }: Props) {
 
             {response && !response.error && (
               <>
-                <InsightItem
-                  dotColor={sentimentColor(response.sentiment)}
-                  boldText={primaryValue(response)}
-                  boldColor={sentimentColor(response.sentiment)}
-                  rest={`in ${(response.metric_used ?? response.columns?.[0] ?? "result").replace(/_/g, " ")}`}
-                />
-                <InsightItem
-                  dotColor="var(--text-tertiary)"
-                  boldText={`Metric: ${response.metric_used ?? "—"}`}
-                  boldColor="var(--text-secondary)"
-                  rest=""
-                />
-                <InsightItem
-                  dotColor="var(--text-tertiary)"
-                  boldText=""
-                  boldColor="var(--text-secondary)"
-                  rest={`${response.row_count} row${response.row_count === 1 ? "" : "s"} · ${Math.round(response.total_time_ms ?? 0)}ms`}
-                />
+                {/* Headline */}
+                {response.headline ? (
+                  <p
+                    className="text-[13px] font-semibold leading-snug mb-2"
+                    style={{ color: sentimentColor(response.sentiment) }}
+                  >
+                    {response.headline}
+                  </p>
+                ) : (
+                  <InsightItem
+                    dotColor={sentimentColor(response.sentiment)}
+                    boldText={primaryValue(response)}
+                    boldColor={sentimentColor(response.sentiment)}
+                    rest={`in ${(response.metric_used ?? response.columns?.[0] ?? "result").replace(/_/g, " ")}`}
+                  />
+                )}
+
+                {/* Narrative */}
+                {response.narrative ? (
+                  <p
+                    className="text-[12px] leading-relaxed"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    {response.narrative}
+                  </p>
+                ) : null}
+
+                {/* Meta line */}
+                <p
+                  className="text-[10px] mt-3 pt-3 border-t"
+                  style={{
+                    color: "var(--text-tertiary)",
+                    borderColor: "var(--divider)",
+                  }}
+                >
+                  {response.metric_used?.replace(/_/g, " ") ?? "—"}
+                  {" · "}
+                  {response.row_count} row{response.row_count === 1 ? "" : "s"}
+                  {" · "}
+                  {Math.round(response.total_time_ms ?? 0)}ms
+                </p>
               </>
             )}
           </div>
@@ -391,6 +414,7 @@ export default function ChangeTab({ response, loading }: Props) {
             Retrieval {Math.round(response.retrieval_time_ms ?? 0)}ms ·
             SQL gen {Math.round(response.sql_gen_time_ms ?? 0)}ms ·
             Exec {Math.round(response.execution_time_ms ?? 0)}ms ·
+            Narrate {Math.round((response as { narrate_time_ms?: number }).narrate_time_ms ?? 0)}ms ·
             Total {Math.round(response.total_time_ms ?? 0)}ms
           </p>
         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
 import * as duckdb from "@duckdb/node-api";
+import { narrate } from "@/lib/narrator";
 
 function sanitize(v: unknown): unknown {
   if (typeof v === "bigint") return Number(v);
@@ -9,6 +10,10 @@ function sanitize(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sanitize);
   if (typeof v === "object") {
     const rec = v as Record<string, unknown>;
+    // DuckDB DATE type: {days: N} — days since 1970-01-01
+    if (Object.keys(rec).length === 1 && "days" in rec && typeof rec.days === "number") {
+      return new Date(rec.days * 86400 * 1000).toISOString().slice(0, 10);
+    }
     // DuckDB DECIMAL type: {value: BigInt, scale: number}
     if ("value" in rec && "scale" in rec && typeof rec.scale === "number") {
       const raw = typeof rec.value === "bigint" ? Number(rec.value) : Number(rec.value);
@@ -199,6 +204,28 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 
+  // Step 4: Narrate (non-blocking — failure returns empty strings, doesn't abort)
+  let headline = "";
+  let narrative = "";
+  let narrateTimeMs = 0;
+  try {
+    const t_narr = Date.now();
+    const narration = await narrate({
+      question,
+      metric_used: sqlResult.metric_used as string | null ?? null,
+      sentiment: sqlResult.sentiment as string | null ?? null,
+      columns: execResult.columns,
+      rows: execResult.rows,
+      row_count: execResult.row_count,
+      truncated: execResult.truncated,
+    });
+    narrateTimeMs = Date.now() - t_narr;
+    headline = narration.headline;
+    narrative = narration.narrative;
+  } catch {
+    // narrator failure is non-fatal
+  }
+
   return NextResponse.json({
     question,
     retrieved,
@@ -207,6 +234,8 @@ export async function POST(req: NextRequest) {
     sentiment: sqlResult.sentiment ?? null,
     tables_referenced: sqlResult.tables_referenced ?? [],
     reasoning: sqlResult.reasoning ?? null,
+    headline,
+    narrative,
     columns: execResult.columns,
     rows: execResult.rows,
     row_count: execResult.row_count,
@@ -214,6 +243,7 @@ export async function POST(req: NextRequest) {
     retrieval_time_ms: retrievalTimeMs,
     sql_gen_time_ms: sqlGenTimeMs,
     execution_time_ms: execTimeMs,
+    narrate_time_ms: narrateTimeMs,
     total_time_ms: Date.now() - t_start,
     error: null,
   });
