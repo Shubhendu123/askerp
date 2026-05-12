@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -14,8 +15,8 @@ export default function Home() {
         <p className="mt-2 text-sm text-muted-foreground">
           Built with Next.js, DuckDB, and Claude. Powered by natural language.
         </p>
-        <Button className="mt-8" disabled>
-          Start chatting
+        <Button className="mt-8" asChild>
+          <Link href="/chat">Start chatting</Link>
         </Button>
       </main>
 

@@ -173,3 +173,29 @@ This document captures the meaningful decisions made during the build, in the fo
 - Accept the regression; let the Week 3 planner agent decompose compound queries.
 **Decision:** Accept. Compound queries are a planner-layer problem, not a retrieval-layer problem.
 **Tradeoffs:** Q11 retrieves a defensible-but-not-primary metric in single-pass retrieval. The Week 3 planner will decompose: "first what's the metric (revenue)? Then what's the breakdown (region, time)? Then what explains the result (concentration, churn)?" Each sub-query goes through retrieval separately. This is the correct architectural location for compound-query handling — retrieval optimizes for direct-match queries, planner handles compound intent.
+
+---
+
+## D-018: Subprocess-based SQL generator (Python from TypeScript)
+
+**Context:** The SQL generator is a Python agent using the Anthropic SDK. The Next.js API route is TypeScript. We need to call the Python agent from within the Next.js route handler.
+**Options considered:**
+- Direct TypeScript Anthropic SDK call with schema-in-prompt: would duplicate the Python prompt, lose the few-shot examples, require reimplementing the SQL generation logic.
+- REST microservice (FastAPI for SQL generator too): adds operational complexity — two Python services to manage instead of one.
+- Spawn Python subprocess from Node: simple, zero extra service, leverages existing sql_generator.py as-is.
+
+**Decision:** Spawn Python subprocess, pass question+chunks via stdin as JSON, read SQL response from stdout.
+**Tradeoffs:** Slightly higher latency (subprocess start ~100ms) but avoids maintaining duplicate prompt logic in two languages. Shell-injection-safe via stdin rather than argv. Timeout guarded at 30s. Acceptable for a portfolio demo context.
+
+---
+
+## D-019: @duckdb/node-api for direct DuckDB access from Next.js
+
+**Context:** The semantic layer runs on a DuckDB file (`data/northwind.db`). We need to execute SQL from the Next.js API route.
+**Options considered:**
+- Shell out to `duckdb` CLI: requires duckdb binary on PATH, parses text output, fragile.
+- @duckdb/node-api (official Anthropic-recommended Node bindings): native `.node` addon, requires webpack externalization.
+- Better-sqlite3 or pg: would require exporting DuckDB → SQLite/Postgres, losing DuckDB's columnar/analytical advantage.
+
+**Decision:** Use @duckdb/node-api with `serverComponentsExternalPackages: ['@duckdb/node-api']` in next.config.mjs.
+**Tradeoffs:** Requires Next.js config change to prevent webpack from bundling the native addon. DuckDB DECIMAL values return as `{value: BigInt, scale: number}` objects requiring custom deserialization in a `sanitize()` helper. Read-only mode (access_mode: "READ_ONLY") protects the data file from accidental mutation.
