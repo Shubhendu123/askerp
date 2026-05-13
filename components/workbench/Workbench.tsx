@@ -130,7 +130,7 @@ export default function Workbench() {
                 style={{ background: "var(--bg-accent)", color: "var(--text-secondary)", border: "1px solid var(--divider2)" }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Northwind Furniture · 3 yrs · 96K rows
+                Northwind Furniture ERP
               </div>
             </div>
 
@@ -234,17 +234,25 @@ export default function Workbench() {
         {/* Empty state */}
         {!response && !loading && (
           <div className="flex flex-col items-center justify-center pt-20 text-center">
-            {/* Glow orb */}
+            {/* Icon mark */}
             <div className="relative mb-8">
               <div
-                className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl"
+                className="w-20 h-20 rounded-2xl flex items-center justify-center"
                 style={{
-                  background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.2) 100%)",
-                  border: "1px solid rgba(99,102,241,0.3)",
-                  boxShadow: "0 0 60px rgba(99,102,241,0.15)",
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.15) 100%)",
+                  border: "1px solid rgba(99,102,241,0.25)",
+                  boxShadow: "0 0 48px rgba(99,102,241,0.12)",
                 }}
               >
-                📊
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Bar chart bars */}
+                  <rect x="4" y="20" width="6" height="12" rx="1.5" fill="#6366F1" opacity="0.5"/>
+                  <rect x="13" y="13" width="6" height="19" rx="1.5" fill="#6366F1" opacity="0.75"/>
+                  <rect x="22" y="8" width="6" height="24" rx="1.5" fill="#6366F1"/>
+                  {/* Sparkle / AI dot */}
+                  <circle cx="29" cy="6" r="3" fill="#8B5CF6"/>
+                  <path d="M29 3.5V2M29 10V8.5M26.5 6H25M33 6H31.5M27.1 4.1L26.05 3.05M31.9 7.9L30.85 6.85M27.1 7.9L26.05 8.95M31.9 4.1L30.85 5.15" stroke="#A78BFA" strokeWidth="1" strokeLinecap="round"/>
+                </svg>
               </div>
             </div>
 
