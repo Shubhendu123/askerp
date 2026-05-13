@@ -39,6 +39,13 @@ const SUGGESTED = [
   "Which customers churned recently?",
 ];
 
+const FEATURES = [
+  { icon: "⚡", label: "Natural Language" },
+  { icon: "📈", label: "Trend Analysis" },
+  { icon: "🔍", label: "Driver Breakdown" },
+  { icon: "💬", label: "AI Narration" },
+];
+
 export default function Workbench() {
   const [history, setHistory] = useState<string[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
@@ -97,156 +104,177 @@ export default function Workbench() {
     }
   }
 
-  function submit() {
-    ask(input);
-  }
-
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: "var(--bg-page)" }}
-    >
-      {/* ── Top ask bar ─────────────────────────────────────────────────── */}
-      <div
-        className="sticky top-0 z-20 border-b px-6 py-4"
-        style={{
-          background: "var(--bg-surface)",
-          borderColor: "var(--divider)",
-        }}
+    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-page)" }}>
+
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
+      <header
+        className="sticky top-0 z-20 border-b"
+        style={{ background: "var(--bg-surface)", borderColor: "var(--divider)" }}
       >
-        {/* Brand row */}
-        <div className="flex items-center gap-3 mb-3">
-          <span
-            className="font-semibold text-sm shrink-0"
-            style={{ color: "var(--text-primary)" }}
-          >
-            AskERP
-          </span>
-          <span
-            className="text-[11px]"
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            Northwind Furniture · 3 years · 96K rows
-          </span>
-        </div>
+        <div className="max-w-5xl mx-auto px-6 py-4">
 
-        {/* Input row — full width */}
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder="Ask a question about Northwind Furniture data…"
-            disabled={loading}
-            rows={1}
-            className="flex-1 resize-none rounded-lg px-4 py-2.5 text-sm leading-snug outline-none border transition-colors disabled:opacity-50"
-            style={{
-              background: "var(--bg-page)",
-              border: "1.5px solid var(--divider)",
-              color: "var(--text-primary)",
-            }}
-            onFocus={(e) =>
-              (e.currentTarget.style.borderColor = "var(--accent-primary)")
-            }
-            onBlur={(e) =>
-              (e.currentTarget.style.borderColor = "var(--divider)")
-            }
-          />
-          <button
-            onClick={submit}
-            disabled={loading || !input.trim()}
-            className="shrink-0 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "var(--accent-primary)" }}
-          >
-            {loading ? "Thinking…" : "Ask"}
-          </button>
-        </div>
-
-        {/* Suggested chips — only when no history */}
-        {history.length === 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {SUGGESTED.map((q) => (
-              <button
-                key={q}
-                onClick={() => ask(q)}
-                disabled={loading}
-                className="text-[11px] px-3 py-1 rounded-full border transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--bg-accent)]"
-                style={{
-                  borderColor: "var(--divider)",
-                  color: "var(--text-secondary)",
-                  background: "transparent",
-                }}
+          {/* Brand + dataset row */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {/* Logo mark */}
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: "linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)" }}
               >
-                {q}
-              </button>
-            ))}
-          </div>
-        )}
+                <span className="text-white text-xs font-bold">AE</span>
+              </div>
+              <span className="font-bold text-lg tracking-tight gradient-text">AskERP</span>
+              <div
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium"
+                style={{ background: "var(--bg-accent)", color: "var(--text-secondary)", border: "1px solid var(--divider2)" }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                Northwind Furniture · 3 yrs · 96K rows
+              </div>
+            </div>
 
-        {/* History chips — once there's history */}
-        {history.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            <span
-              className="text-[10px] self-center uppercase tracking-wider mr-1"
-              style={{ color: "var(--text-tertiary)" }}
+            {/* Feature pills — right side */}
+            <div className="hidden md:flex items-center gap-2">
+              {FEATURES.map((f) => (
+                <span
+                  key={f.label}
+                  className="text-[10px] px-2 py-1 rounded-full font-medium"
+                  style={{ background: "var(--bg-accent)", color: "var(--text-tertiary)", border: "1px solid var(--divider)" }}
+                >
+                  {f.icon} {f.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Ask input */}
+          <div className="flex gap-3 items-start">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  ask(input);
+                }
+              }}
+              placeholder="Ask anything about Northwind Furniture — revenue, margins, customers, orders…"
+              disabled={loading}
+              rows={1}
+              className="input-glow flex-1 resize-none rounded-xl px-4 py-3 text-sm leading-snug border transition-all disabled:opacity-40"
+              style={{
+                background: "var(--bg-input)",
+                border: "1.5px solid var(--divider2)",
+                color: "var(--text-primary)",
+              }}
+            />
+            <button
+              onClick={() => ask(input)}
+              disabled={loading || !input.trim()}
+              className="btn-gradient shrink-0 px-6 py-3 rounded-xl text-sm font-semibold text-white"
             >
-              Recent:
-            </span>
-            {history.map((q) => {
-              const isActive = q === activeQuestion;
-              return (
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Thinking
+                </span>
+              ) : "Ask"}
+            </button>
+          </div>
+
+          {/* Suggested / History chips */}
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {history.length === 0 ? (
+              SUGGESTED.map((q) => (
                 <button
                   key={q}
-                  onClick={() => !loading && ask(q)}
+                  onClick={() => ask(q)}
                   disabled={loading}
-                  className="text-[11px] px-3 py-1 rounded-full border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{
-                    borderColor: isActive
-                      ? "var(--accent-primary)"
-                      : "var(--divider)",
-                    color: isActive
-                      ? "var(--accent-primary)"
-                      : "var(--text-secondary)",
-                    background: isActive ? "var(--bg-accent)" : "transparent",
-                    fontWeight: isActive ? 500 : 400,
-                  }}
+                  className="text-[11px] px-3 py-1 rounded-full border transition-all disabled:opacity-40 hover:border-indigo-500/50 hover:text-indigo-300"
+                  style={{ borderColor: "var(--divider2)", color: "var(--text-secondary)", background: "transparent" }}
                 >
-                  {q.length > 45 ? q.slice(0, 42) + "…" : q}
+                  {q}
                 </button>
-              );
-            })}
+              ))
+            ) : (
+              <>
+                <span className="text-[10px] self-center uppercase tracking-widest mr-1" style={{ color: "var(--text-tertiary)" }}>
+                  Recent:
+                </span>
+                {history.map((q) => {
+                  const isActive = q === activeQuestion;
+                  return (
+                    <button
+                      key={q}
+                      onClick={() => !loading && ask(q)}
+                      disabled={loading}
+                      className="text-[11px] px-3 py-1 rounded-full border transition-all disabled:opacity-40"
+                      style={{
+                        borderColor: isActive ? "var(--accent-primary)" : "var(--divider2)",
+                        color: isActive ? "var(--accent-primary)" : "var(--text-secondary)",
+                        background: isActive ? "var(--accent-glow)" : "transparent",
+                        fontWeight: isActive ? 500 : 400,
+                      }}
+                    >
+                      {q.length > 45 ? q.slice(0, 42) + "…" : q}
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      </header>
 
-      {/* ── Results area ────────────────────────────────────────────────── */}
-      <div className="flex-1 px-6 py-5 space-y-3 max-w-5xl w-full mx-auto">
+      {/* ── Results ──────────────────────────────────────────────────────── */}
+      <main className="flex-1 px-6 py-6 max-w-5xl w-full mx-auto">
+
         {/* Empty state */}
         {!response && !loading && (
-          <div
-            className="flex flex-col items-center justify-center pt-24 text-center"
-          >
-            <p
-              className="text-4xl mb-4"
-              style={{ color: "var(--text-tertiary)" }}
-            >
-              📊
+          <div className="flex flex-col items-center justify-center pt-20 text-center">
+            {/* Glow orb */}
+            <div className="relative mb-8">
+              <div
+                className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl"
+                style={{
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.2) 100%)",
+                  border: "1px solid rgba(99,102,241,0.3)",
+                  boxShadow: "0 0 60px rgba(99,102,241,0.15)",
+                }}
+              >
+                📊
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
+              What do you want to know?
+            </h2>
+            <p className="text-sm mb-8 max-w-sm" style={{ color: "var(--text-secondary)" }}>
+              Ask a plain-English question about Northwind Furniture&apos;s ERP data.
+              The AI agent figures out the rest.
             </p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Ask anything about Northwind Furniture&apos;s ERP data
-            </p>
-            <p
-              className="text-xs mt-1"
-              style={{ color: "var(--text-tertiary)" }}
-            >
-              Revenue · Margins · Customers · Orders
-            </p>
+
+            {/* Feature cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-2xl">
+              {[
+                { icon: "💬", title: "AI Narration", desc: "Plain-English insight with every result" },
+                { icon: "📈", title: "Trend Analysis", desc: "Spot patterns over time automatically" },
+                { icon: "🔍", title: "Driver Breakdown", desc: "Why by segment, category & region" },
+                { icon: "📋", title: "Data Table", desc: "Full results with formatting" },
+              ].map((f) => (
+                <div
+                  key={f.title}
+                  className="rounded-xl p-4 text-left"
+                  style={{ background: "var(--bg-card)", border: "1px solid var(--divider)" }}
+                >
+                  <p className="text-xl mb-2">{f.icon}</p>
+                  <p className="text-[12px] font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{f.title}</p>
+                  <p className="text-[11px] leading-snug" style={{ color: "var(--text-tertiary)" }}>{f.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -261,37 +289,20 @@ export default function Workbench() {
             trend: hasData && canTrend(cols, rows),
             drivers: canDrivers(response?.metric_used ?? null, hasData),
           };
-          // If active tab becomes disabled (e.g. new query), fall back to change
           const safeTab = enabledTabs[activeTab] ? activeTab : "change";
 
           return (
-            <>
-              <AnalysisHeader
-                response={response}
-                loading={loading}
-                activeQuestion={activeQuestion}
-              />
-              <InsightTabs
-                activeTab={safeTab}
-                onTabChange={setActiveTab}
-                enabledTabs={enabledTabs}
-              />
-              {safeTab === "change" && (
-                <ChangeTab response={response} loading={loading} />
-              )}
-              {safeTab === "contribution" && response && (
-                <ContributionTab response={response} />
-              )}
-              {safeTab === "trend" && response && (
-                <TrendTab response={response} />
-              )}
-              {safeTab === "drivers" && response && (
-                <DriversTab response={response} />
-              )}
-            </>
+            <div className="space-y-4">
+              <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} />
+              <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
+              {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
+              {safeTab === "contribution" && response && <ContributionTab response={response} />}
+              {safeTab === "trend" && response && <TrendTab response={response} />}
+              {safeTab === "drivers" && response && <DriversTab response={response} />}
+            </div>
           );
         })()}
-      </div>
+      </main>
     </div>
   );
 }
