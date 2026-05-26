@@ -10,8 +10,6 @@ interface Props {
 const TAB_ORDER: Tab[] = [
   { id: "change",       label: "Change",       icon: "◈" },
   { id: "contribution", label: "Contribution", icon: "◫" },
-  { id: "trend",        label: "Trend",        icon: "◬" },
-  { id: "drivers",      label: "Drivers",      icon: "◭" },
 ];
 
 export default function InsightTabs({ activeTab, onTabChange, enabledTabs }: Props) {

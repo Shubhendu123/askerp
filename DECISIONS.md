@@ -225,3 +225,23 @@ This document captures the meaningful decisions made during the build, in the fo
 
 **Decision:** Add `sentiment` field (positive/negative/none) to each metric in data/metrics.yaml.
 **Tradeoffs:** Requires per-metric curation. In exchange: narration tone and badge colors are deterministic, fast, and auditable. Same pattern as Auto Analysis's "Sentiment" configuration. The SQL generator receives this via retrieved context and echoes it back in the response JSON.
+
+### D-022: Hide Drivers and Trend tabs in Week 4 demo; rebuild Drivers as full KDA in Week 5
+
+**Context:** Day 9-11 shipped 4 insight tabs inspired by Auto Analysis (Change, Contribution, Trend, Drivers). On live testing, Drivers returned dimensional decomposition (customer segment / category / region breakdown) rather than true driver analysis. This duplicates Contribution and mismatches the tab name. Trend tab is functional but underdeveloped for current synthetic data.
+
+**Options considered:**
+- Ship as-is with both tabs visible: risk of interview probes catching the Drivers/Contribution overlap.
+- Rename Drivers to "Breakdown": resolves naming but loses the Auto Analysis-pattern story.
+- Hide both tabs and rebuild Drivers as proper KDA in Week 5.
+- Build full Key Driver Analysis now with synthetic Northwind marketing-mix data and statsmodels regression pipeline: ~3 days, delays reliability work.
+
+**Decision:** Hide Trend and Drivers tabs in the demo. Keep underlying files and API routes intact. Sequence reliability work (validator, retry, evals, observability) before rebuilding Drivers as full statsmodels-based KDA in Week 5.
+
+**Tradeoffs:** Two fewer visible tabs in the demo. In exchange: the demo shows only what works confidently. Each visible tab (Change, Contribution) has clear semantic meaning matching its name. Sequencing reliability before KDA means interview answers about quality, evals, and hallucination defense come first — those get probed more often than insight-engine depth.
+
+**Week 5 rebuild plan for Drivers:**
+- Synthetic Northwind marketing-mix driver data (sales spend, lead response time, competitor price index, seasonality, trade shows)
+- statsmodels OLS pipeline with VIF, ADF, Breusch-Pagan, Durbin-Watson, standardized coefficients
+- Agent calls regression as a tool — not LLM-generated correlations
+- Sentiment-aware narration of ranked drivers
