@@ -5,9 +5,7 @@ import AnalysisHeader from "./AnalysisHeader";
 import InsightTabs from "./InsightTabs";
 import ChangeTab from "./ChangeTab";
 import ContributionTab from "./ContributionTab";
-import TrendTab from "./TrendTab";
-import DriversTab from "./DriversTab";
-import { canContribute, canTrend, canDrivers } from "@/lib/chartUtils";
+import { canContribute } from "@/lib/chartUtils";
 
 export interface AskResponse {
   question: string;
@@ -41,8 +39,6 @@ const SUGGESTED = [
 
 const FEATURES = [
   { icon: "⚡", label: "Natural Language" },
-  { icon: "📈", label: "Trend Analysis" },
-  { icon: "🔍", label: "Driver Breakdown" },
   { icon: "💬", label: "AI Narration" },
 ];
 
@@ -265,11 +261,9 @@ export default function Workbench() {
             </p>
 
             {/* Feature cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
               {[
                 { icon: "💬", title: "AI Narration", desc: "Plain-English insight with every result" },
-                { icon: "📈", title: "Trend Analysis", desc: "Spot patterns over time automatically" },
-                { icon: "🔍", title: "Driver Breakdown", desc: "Why by segment, category & region" },
                 { icon: "📋", title: "Data Table", desc: "Full results with formatting" },
               ].map((f) => (
                 <div
@@ -294,8 +288,6 @@ export default function Workbench() {
           const enabledTabs: Record<string, boolean> = {
             change: true,
             contribution: hasData && canContribute(cols, rows),
-            trend: hasData && canTrend(cols, rows),
-            drivers: canDrivers(response?.metric_used ?? null, hasData),
           };
           const safeTab = enabledTabs[activeTab] ? activeTab : "change";
 
@@ -305,8 +297,6 @@ export default function Workbench() {
               <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
               {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
               {safeTab === "contribution" && response && <ContributionTab response={response} />}
-              {safeTab === "trend" && response && <TrendTab response={response} />}
-              {safeTab === "drivers" && response && <DriversTab response={response} />}
             </div>
           );
         })()}
