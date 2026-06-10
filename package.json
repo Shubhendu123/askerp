@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.92.0",
     "@base-ui/react": "^1.4.1",
     "@duckdb/node-api": "^1.5.2-r.1",
+    "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "eventemitter3": "^5.0.4",
