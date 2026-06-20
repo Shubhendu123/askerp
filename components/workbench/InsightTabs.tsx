@@ -1,6 +1,6 @@
 "use client";
 
-interface Tab { id: string; label: string; icon: string; }
+interface Tab { id: string; label: string; }
 interface Props {
   activeTab: string;
   onTabChange: (id: string) => void;
@@ -8,15 +8,20 @@ interface Props {
 }
 
 const TAB_ORDER: Tab[] = [
-  { id: "change",       label: "Change",       icon: "◈" },
-  { id: "contribution", label: "Contribution", icon: "◫" },
+  { id: "change",       label: "Change" },
+  { id: "contribution", label: "Contribution" },
 ];
 
 export default function InsightTabs({ activeTab, onTabChange, enabledTabs }: Props) {
   return (
     <div
-      className="flex items-center gap-1 p-1 rounded-xl w-fit"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--divider)" }}
+      className="flex items-center gap-1 w-fit"
+      style={{
+        background: "var(--bg-subtle)",
+        border: "1px solid var(--border)",
+        borderRadius: 999,
+        padding: 3,
+      }}
     >
       {TAB_ORDER.map((tab) => {
         const enabled = enabledTabs[tab.id] ?? false;
@@ -26,22 +31,22 @@ export default function InsightTabs({ activeTab, onTabChange, enabledTabs }: Pro
             key={tab.id}
             onClick={() => enabled && onTabChange(tab.id)}
             disabled={!enabled}
-            className="px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150 flex items-center gap-1.5"
+            className="transition-all duration-150"
             style={{
-              background: isActive
-                ? "linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)"
-                : "transparent",
+              fontSize: 12,
+              fontWeight: 500,
+              padding: "5px 16px",
+              borderRadius: 999,
+              background: isActive ? "var(--accent)" : "transparent",
               color: isActive
                 ? "#fff"
                 : enabled
                 ? "var(--text-secondary)"
                 : "var(--text-tertiary)",
-              opacity: enabled ? 1 : 0.4,
+              opacity: enabled ? 1 : 0.45,
               cursor: enabled ? "pointer" : "default",
-              boxShadow: isActive ? "0 0 12px rgba(99,102,241,0.4)" : "none",
             }}
           >
-            <span className="text-[10px] opacity-70">{tab.icon}</span>
             {tab.label}
           </button>
         );

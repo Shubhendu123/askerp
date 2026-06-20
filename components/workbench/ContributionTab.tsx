@@ -25,7 +25,7 @@ function fmt(v: number): string {
 function sentimentColor(s: string | null | undefined) {
   if (s === "positive") return "var(--sentiment-positive)";
   if (s === "negative") return "var(--sentiment-negative)";
-  return "var(--accent-primary)";
+  return "var(--accent)";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,18 +58,17 @@ export default function ContributionTab({ response }: Props) {
 
   return (
     <div
-      className="rounded-xl border p-5"
-      style={{ background: "var(--bg-surface)", borderColor: "var(--divider)" }}
+      className="p-5"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+      }}
     >
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p
-            className="text-[10px] uppercase tracking-widest font-medium mb-1"
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            Contribution breakdown
-          </p>
-          <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+          <p className="label-caps mb-1">Contribution breakdown</p>
+          <p className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
             {data.length} segments · total {fmt(total)}
           </p>
         </div>
@@ -99,7 +98,7 @@ export default function ContributionTab({ response }: Props) {
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "var(--bg-accent)" }} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: "var(--bg-subtle)" }} />
           <Bar dataKey="share" radius={[0, 4, 4, 0]}>
             {data.map((_, i) => (
               <Cell
@@ -114,8 +113,8 @@ export default function ContributionTab({ response }: Props) {
 
       {/* Legend table */}
       <div
-        className="mt-4 border-t pt-3 grid gap-1"
-        style={{ borderColor: "var(--divider)" }}
+        className="mt-4 pt-3 grid gap-1"
+        style={{ borderTop: "1px solid var(--border)" }}
       >
         {data.slice(0, 10).map((d) => (
           <div key={d.label} className="flex items-center gap-2 text-[11px]">

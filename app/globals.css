@@ -3,103 +3,70 @@
 @tailwind utilities;
 
 @layer base {
-  /* ── Light mode (default) ───────────────────────────────────────────── */
+  /* ── Redwood-inspired light theme (D-025) ───────────────────────────────
+     Single light theme. Brick-red (--brand) is for the brand mark ONLY.
+     Teal (--accent) is the interactive color for every button/link/active
+     state. Sentiment red (--sentiment-negative) is a distinct red, used
+     only for unfavorable sentiment — never confused with --brand. */
   :root {
-    --bg-page:        #F1F5F9;
-    --bg-surface:     #FFFFFF;
-    --bg-card:        #FFFFFF;
-    --bg-elevated:    #F8FAFC;
-    --bg-accent:      #EEF2FF;
-    --bg-input:       #FFFFFF;
+    --bg-page: #F8F6F4;
+    --bg-surface: #FFFFFF;
+    --bg-subtle: #F1EEE9;
+    --brand: #A53725;
+    --accent: #0F6E56;
+    --accent-hover: #0A5642;
+    --accent-subtle: #E1F5EE;
+    --text-primary: #1A1715;
+    --text-secondary: #6B655F;
+    --text-tertiary: #9A938C;
+    --border: #E5E0DB;
+    --sentiment-positive: #2E7D5B;
+    --sentiment-positive-bg: #E6F2EC;
+    --sentiment-negative: #C13C3C;
+    --sentiment-negative-bg: #FCEBEB;
+    --sentiment-neutral: #6B655F;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
 
-    --text-primary:   #0F172A;
-    --text-secondary: #475569;
-    --text-tertiary:  #94A3B8;
+    /* ── Legacy aliases ───────────────────────────────────────────────────
+       Older token names still referenced by some components are remapped
+       onto the Redwood palette so nothing renders dark mid-migration. */
+    --bg-card: var(--bg-surface);
+    --bg-elevated: var(--bg-subtle);
+    --bg-accent: var(--bg-subtle);
+    --bg-input: var(--bg-surface);
+    --divider: var(--border);
+    --divider2: var(--border);
+    --accent-primary: var(--accent);
+    --accent-secondary: var(--accent);
+    --accent-glow: rgba(15, 110, 86, 0.10);
+    --accent-glow-strong: rgba(15, 110, 86, 0.22);
 
-    --accent-primary:      #6366F1;
-    --accent-secondary:    #8B5CF6;
-    --accent-hover:        #4F46E5;
-    --accent-glow:         rgba(99, 102, 241, 0.12);
-    --accent-glow-strong:  rgba(99, 102, 241, 0.28);
-
-    --sentiment-positive: #059669;
-    --sentiment-negative: #DC2626;
-    --sentiment-neutral:  #64748B;
-
-    --divider:  #E2E8F0;
-    --divider2: #CBD5E1;
-
-    /* shadcn compat */
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* ── shadcn/ui compat (light) ───────────────────────────────────────────
+       Namespaced as --ui-* where the Redwood palette already owns a token of
+       the same name (--accent, --border), so hsl(var(--ui-*)) never collides
+       with the Redwood hex values used directly by components. */
+    --background: 36 25% 96%;
+    --foreground: 20 11% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 20 11% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --popover-foreground: 20 11% 9%;
+    --primary: 165 76% 25%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 33 21% 92%;
+    --secondary-foreground: 20 11% 9%;
+    --muted: 33 21% 92%;
+    --muted-foreground: 30 6% 40%;
+    --ui-accent: 33 21% 92%;
+    --accent-foreground: 20 11% 9%;
+    --destructive: 0 53% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --ui-border: 30 16% 88%;
+    --input: 30 16% 88%;
+    --ring: 165 76% 25%;
     --radius: 0.5rem;
-  }
-
-  /* ── Dark mode ──────────────────────────────────────────────────────── */
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg-page:        #080C14;
-      --bg-surface:     #0E1420;
-      --bg-card:        #131927;
-      --bg-elevated:    #1A2235;
-      --bg-accent:      #1E2A3E;
-      --bg-input:       #0B1019;
-
-      --text-primary:   #EEF2FF;
-      --text-secondary: #8892A4;
-      --text-tertiary:  #4A5568;
-
-      --accent-primary:      #6366F1;
-      --accent-secondary:    #8B5CF6;
-      --accent-hover:        #4F46E5;
-      --accent-glow:         rgba(99, 102, 241, 0.18);
-      --accent-glow-strong:  rgba(99, 102, 241, 0.35);
-
-      --sentiment-positive: #34D399;
-      --sentiment-negative: #F87171;
-      --sentiment-neutral:  #94A3B8;
-
-      --divider:  #1E2A3E;
-      --divider2: #243044;
-
-      /* shadcn compat */
-      --background: 222.2 84% 4.9%;
-      --foreground: 210 40% 98%;
-      --card: 222.2 84% 4.9%;
-      --card-foreground: 210 40% 98%;
-      --popover: 222.2 84% 4.9%;
-      --popover-foreground: 210 40% 98%;
-      --primary: 210 40% 98%;
-      --primary-foreground: 222.2 47.4% 11.2%;
-      --secondary: 217.2 32.6% 17.5%;
-      --secondary-foreground: 210 40% 98%;
-      --muted: 217.2 32.6% 17.5%;
-      --muted-foreground: 215 20.2% 65.1%;
-      --accent: 217.2 32.6% 17.5%;
-      --accent-foreground: 210 40% 98%;
-      --destructive: 0 62.8% 30.6%;
-      --destructive-foreground: 210 40% 98%;
-      --border: 217.2 32.6% 17.5%;
-      --input: 217.2 32.6% 17.5%;
-      --ring: 212.7 26.8% 83.9%;
-    }
   }
 }
 
@@ -108,48 +75,38 @@
   body {
     background: var(--bg-page);
     color: var(--text-primary);
-    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Headings: weight 500, never bold (Redwood typographic restraint) */
+  h1, h2, h3, h4, h5, h6 { font-weight: 500; }
 }
 
-/* ── Gradient text ───────────────────────────────────────────────────── */
-.gradient-text {
-  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* ── Small uppercase label ──────────────────────────────────────────────── */
+.label-caps {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
 }
 
-/* ── Gradient button ─────────────────────────────────────────────────── */
-.btn-gradient {
-  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  transition: opacity 0.15s, box-shadow 0.15s;
-}
-.btn-gradient:hover:not(:disabled) {
-  opacity: 0.9;
-  box-shadow: 0 0 20px var(--accent-glow-strong);
-}
-.btn-gradient:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* ── Focus ring ──────────────────────────────────────────────────────── */
+/* ── Focus ring (teal) ──────────────────────────────────────────────────── */
 .input-glow:focus {
   outline: none;
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
-/* ── Shimmer skeleton ────────────────────────────────────────────────── */
+/* ── Shimmer skeleton ───────────────────────────────────────────────────── */
 @keyframes shimmer {
   0%   { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-accent) 50%, var(--bg-elevated) 75%);
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border) 50%, var(--bg-subtle) 75%);
   background-size: 800px 100%;
   animation: shimmer 1.4s infinite linear;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }

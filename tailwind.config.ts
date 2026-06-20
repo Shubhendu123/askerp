@@ -33,32 +33,38 @@ const config: Config = {
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "hsl(var(--ui-accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
-        border: "hsl(var(--border))",
+        border: "hsl(var(--ui-border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
-        // AskERP Workbench palette
+        // Redwood named tokens
+        brand:        "var(--brand)",
+        "accent-teal": "var(--accent)",
+        // AskERP Workbench palette (Redwood)
         wb: {
           page:     "var(--bg-page)",
           surface:  "var(--bg-surface)",
-          header:   "var(--bg-header)",
-          accent:   "var(--bg-accent)",
-          divider:  "var(--divider)",
+          subtle:   "var(--bg-subtle)",
+          accent:   "var(--bg-subtle)",
+          divider:  "var(--border)",
           primary:  "var(--text-primary)",
           secondary:"var(--text-secondary)",
           tertiary: "var(--text-tertiary)",
-          blue:     "var(--accent-primary)",
-          "blue-hover": "var(--accent-hover)",
+          teal:     "var(--accent)",
+          "teal-hover": "var(--accent-hover)",
           positive: "var(--sentiment-positive)",
           negative: "var(--sentiment-negative)",
           neutral:  "var(--sentiment-neutral)",
         },
+      },
+      fontFamily: {
+        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

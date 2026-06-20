@@ -23,12 +23,6 @@ function primaryValue(response: AskResponse): string {
   return formatNumber((response.rows[0] as unknown[])[0]);
 }
 
-function sentimentColor(s: string | null | undefined) {
-  if (s === "positive") return "var(--sentiment-positive)";
-  if (s === "negative") return "var(--sentiment-negative)";
-  return "var(--accent-primary)";
-}
-
 export default function AnalysisHeader({ response, loading, activeQuestion }: Props) {
   if (!activeQuestion && !loading) return null;
 
@@ -38,23 +32,16 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
 
   return (
     <div
-      className="rounded-2xl px-6 py-5 flex items-center justify-between gap-6 relative overflow-hidden"
+      className="flex items-center justify-between gap-6"
       style={{
-        background: "linear-gradient(135deg, #0E1420 0%, #131927 100%)",
-        border: "1px solid var(--divider2)",
-        boxShadow: "0 0 40px rgba(99,102,241,0.08)",
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        padding: "20px 24px",
       }}
     >
-      {/* Subtle gradient glow in corner */}
-      <div
-        className="absolute top-0 right-0 w-64 h-full opacity-30 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse at top right, rgba(99,102,241,0.25) 0%, transparent 70%)" }}
-      />
-
-      <div className="flex-1 min-w-0 relative">
-        <p className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>
-          Analysis · Northwind Furniture
-        </p>
+      <div className="flex-1 min-w-0">
+        <p className="label-caps mb-1.5">Analysis · Northwind Furniture</p>
 
         {loading && !response ? (
           <div className="space-y-2">
@@ -63,12 +50,15 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
           </div>
         ) : (
           <>
-            <h2 className="text-lg font-bold text-white leading-tight truncate capitalize">
+            <h2
+              className="leading-tight truncate capitalize"
+              style={{ fontSize: 18, fontWeight: 500, color: "var(--text-primary)" }}
+            >
               {response?.metric_used
                 ? response.metric_used.replace(/_/g, " ")
                 : activeQuestion}
             </h2>
-            <p className="text-[11px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+            <p className="mt-1" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
               {response?.error
                 ? "Error generating analysis"
                 : response
@@ -79,26 +69,31 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
         )}
       </div>
 
-      {/* Big KPI number */}
+      {/* Big KPI number (single-stat results) */}
       {isSingleStat && !response!.error && (
-        <div className="shrink-0 text-right relative">
+        <div className="shrink-0 text-right">
           <p
-            className="text-3xl font-bold leading-none"
-            style={{ color: sentimentColor(response!.sentiment) }}
+            className="leading-none"
+            style={{ fontSize: 30, fontWeight: 500, color: "var(--text-primary)" }}
           >
             {primaryValue(response!)}
           </p>
-          <p className="text-[10px] mt-1.5 uppercase tracking-wider" style={{ color: "var(--text-tertiary)" }}>
-            {response!.columns[0].replace(/_/g, " ")}
-          </p>
+          <p className="mt-1.5 label-caps">{response!.columns[0].replace(/_/g, " ")}</p>
         </div>
       )}
 
       {/* Error badge */}
       {response?.error && (
         <div
-          className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg"
-          style={{ background: "rgba(248,113,113,0.12)", color: "#F87171", border: "1px solid rgba(248,113,113,0.25)" }}
+          className="shrink-0 font-medium"
+          style={{
+            fontSize: 11,
+            padding: "6px 12px",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--sentiment-negative-bg)",
+            color: "var(--sentiment-negative)",
+            border: "1px solid var(--sentiment-negative)",
+          }}
         >
           {response.error.replace(/_/g, " ")}
         </div>

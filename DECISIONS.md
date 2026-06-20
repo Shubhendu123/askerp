@@ -245,3 +245,25 @@ This document captures the meaningful decisions made during the build, in the fo
 - statsmodels OLS pipeline with VIF, ADF, Breusch-Pagan, Durbin-Watson, standardized coefficients
 - Agent calls regression as a tool — not LLM-generated correlations
 - Sentiment-aware narration of ranked drivers
+
+### D-025: Redwood-inspired light theme over dark neon theme
+
+**Context:** The original AskERP UI used a dark theme with neon-green/purple accents. While visually striking in a thumbnail, it read as a generic "AI demo" rather than enterprise analytics software, undermining the positioning of AskERP as a NetSuite-adjacent product.
+
+**Options considered:**
+- Keep dark neon theme: distinctive but reads as portfolio toy, fights the "built in NetSuite" story.
+- Generic light SaaS theme (teal fintech): clean but no Oracle DNA.
+- Classic NetSuite gray: authentic but dated, utilitarian.
+- Redwood-inspired (Oracle's current design system): warm neutrals, brick-red brand, modern card structure.
+
+**Decision:** Redwood-inspired light theme. Teal (#0F6E56) as the primary interactive color, Oracle brick-red (#A53725) reserved for the brand mark only, warm off-white canvas, white surfaces. Sentiment colors (green/red) kept distinct from brand red.
+
+**Tradeoffs:** Less "flashy" in a portfolio thumbnail than dark neon. In exchange: reads as credible enterprise software, aligns to Oracle's actual design direction (defensible interview story — "I aligned to Redwood, the design system NetSuite is migrating to"), and makes dense financial data more legible. Brand-red vs sentiment-red collision resolved by using teal for all interactive elements and two distinct red shades.
+
+### D-026: App shell with persistent navigation + inhabited empty state
+
+**Context:** The original empty state was a near-empty canvas with a centered hero and two ambiguous cards. No persistent navigation. It read as an early prototype, not a product.
+
+**Decision:** Add a left nav rail (Ask active; Dashboard/Saved/Data as structural stubs) and a top header with brand + context. Replace the empty void with an inhabited landing: search, suggested chips, a live data-overview card (real warehouse stats via /api/warehouse-stats), and recent analyses.
+
+**Tradeoffs:** Dashboard/Saved/Data nav items are non-functional stubs in the demo — structural signals, not working features. The data-overview card adds a DB query on landing (cached 60s). In exchange: the product reads as real enterprise software with navigational structure and a canvas that feels connected to live data.

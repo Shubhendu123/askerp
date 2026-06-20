@@ -1,3 +1,4 @@
+import AppShell from "@/components/shell/AppShell";
 import Workbench from "@/components/workbench/Workbench";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function ChatPage() {
-  return <Workbench />;
+  return (
+    <AppShell>
+      <Workbench />
+    </AppShell>
+  );
 }

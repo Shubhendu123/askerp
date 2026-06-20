@@ -16,6 +16,12 @@ function sentimentColor(sentiment: string | null | undefined): string {
   return "var(--sentiment-neutral)";
 }
 
+function sentimentBg(sentiment: string | null | undefined): string {
+  if (sentiment === "positive") return "var(--sentiment-positive-bg)";
+  if (sentiment === "negative") return "var(--sentiment-negative-bg)";
+  return "var(--bg-subtle)";
+}
+
 function sentimentLabel(sentiment: string | null | undefined): string {
   if (sentiment === "positive") return "Favorable";
   if (sentiment === "negative") return "Unfavorable";
@@ -58,7 +64,7 @@ function InsightItem({
         style={{ width: 6, height: 6, background: dotColor }}
       />
       <p className="text-[12px] leading-snug" style={{ color: "var(--text-secondary)" }}>
-        <span className="font-semibold" style={{ color: boldColor }}>
+        <span className="font-medium" style={{ color: boldColor }}>
           {boldText}
         </span>{" "}
         {rest}
@@ -71,14 +77,8 @@ function InsightItem({
 function SkeletonRow() {
   return (
     <div className="flex gap-2 py-1">
-      <div
-        className="h-3 rounded animate-pulse flex-1"
-        style={{ background: "var(--bg-accent)" }}
-      />
-      <div
-        className="h-3 rounded animate-pulse w-16"
-        style={{ background: "var(--bg-accent)" }}
-      />
+      <div className="h-3 rounded animate-pulse flex-1" style={{ background: "var(--bg-subtle)" }} />
+      <div className="h-3 rounded animate-pulse w-16" style={{ background: "var(--bg-subtle)" }} />
     </div>
   );
 }
@@ -100,15 +100,22 @@ function DataTable({
     rows.some((r) => typeof (r as unknown[])[col] === "number");
 
   return (
-    <div className="rounded overflow-hidden border" style={{ borderColor: "var(--divider)" }}>
+    <div
+      className="overflow-hidden"
+      style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-md)" }}
+    >
       <table className="w-full text-[12px] border-collapse">
         <thead>
-          <tr style={{ background: "var(--bg-accent)" }}>
-            {columns.map((col) => (
+          <tr style={{ background: "var(--bg-subtle)" }}>
+            {columns.map((col, ci) => (
               <th
                 key={col}
-                className="px-3 py-2 text-left font-semibold uppercase text-[10px] tracking-wider whitespace-nowrap"
-                style={{ color: "var(--text-tertiary)" }}
+                className="px-3 py-2 font-medium uppercase text-[10px] tracking-wider whitespace-nowrap"
+                style={{
+                  color: "var(--text-tertiary)",
+                  letterSpacing: "0.06em",
+                  textAlign: isNumeric(ci) ? "right" : "left",
+                }}
               >
                 {col.replace(/_/g, " ")}
               </th>
@@ -120,8 +127,8 @@ function DataTable({
             <tr
               key={ri}
               style={{
-                borderTop: "1px solid var(--divider)",
-                background: ri % 2 === 1 ? "var(--bg-page)" : "var(--bg-surface)",
+                borderTop: "1px solid var(--border)",
+                background: ri % 2 === 1 ? "var(--bg-subtle)" : "var(--bg-surface)",
               }}
             >
               {(row as unknown[]).map((cell, ci) => (
@@ -131,6 +138,7 @@ function DataTable({
                   style={{
                     color: "var(--text-primary)",
                     textAlign: isNumeric(ci) ? "right" : "left",
+                    fontWeight: isNumeric(ci) ? 500 : 400,
                   }}
                 >
                   {formatCell(cell)}
@@ -141,9 +149,9 @@ function DataTable({
         </tbody>
       </table>
       <div
-        className="px-3 py-1.5 text-[10px] border-t"
+        className="px-3 py-1.5 text-[10px]"
         style={{
-          borderColor: "var(--divider)",
+          borderTop: "1px solid var(--border)",
           color: "var(--text-tertiary)",
           background: "var(--bg-surface)",
         }}
@@ -167,16 +175,30 @@ function StatDisplay({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-8">
-      <p
-        className="text-5xl font-semibold"
-        style={{ color: sentimentColor(sentiment) }}
-      >
+      <p style={{ fontSize: 44, fontWeight: 500, color: sentimentColor(sentiment) }}>
         {value}
       </p>
       <p className="mt-2 text-[12px]" style={{ color: "var(--text-tertiary)" }}>
         {label.replace(/_/g, " ")}
       </p>
     </div>
+  );
+}
+
+// ── Outline pill button ───────────────────────────────────────────────────────
+function PillButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-[10px] px-2.5 py-0.5 rounded-full transition-colors"
+      style={{
+        border: "1px solid var(--border)",
+        color: active ? "var(--accent)" : "var(--text-secondary)",
+        background: active ? "var(--accent-subtle)" : "transparent",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -202,25 +224,18 @@ export default function ChangeTab({ response, loading }: Props) {
     <div className="space-y-3">
       {/* Main card */}
       <div
-        className="rounded-xl border p-4"
+        className="p-4"
         style={{
           background: "var(--bg-surface)",
-          borderColor: "var(--divider)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-lg)",
         }}
       >
         {/* Two-column grid: insights (240px) + data */}
         <div className="grid gap-4" style={{ gridTemplateColumns: "240px 1fr" }}>
           {/* ── Insights column ── */}
-          <div
-            className="border-r pr-4 space-y-0"
-            style={{ borderColor: "var(--divider)" }}
-          >
-            <p
-              className="text-[10px] uppercase tracking-widest font-medium mb-3"
-              style={{ color: "var(--text-tertiary)" }}
-            >
-              Insights
-            </p>
+          <div className="pr-4 space-y-0" style={{ borderRight: "1px solid var(--border)" }}>
+            <p className="label-caps mb-3">Insights</p>
 
             {loading && !response && (
               <div className="space-y-3">
@@ -228,17 +243,11 @@ export default function ChangeTab({ response, loading }: Props) {
                   <div key={i} className="flex gap-2">
                     <div
                       className="w-2 h-2 mt-1 rounded-full shrink-0 animate-pulse"
-                      style={{ background: "var(--divider)" }}
+                      style={{ background: "var(--border)" }}
                     />
                     <div className="space-y-1 flex-1">
-                      <div
-                        className="h-3 rounded animate-pulse"
-                        style={{ background: "var(--bg-accent)" }}
-                      />
-                      <div
-                        className="h-3 rounded animate-pulse w-3/4"
-                        style={{ background: "var(--bg-accent)" }}
-                      />
+                      <div className="h-3 rounded animate-pulse" style={{ background: "var(--bg-subtle)" }} />
+                      <div className="h-3 rounded animate-pulse w-3/4" style={{ background: "var(--bg-subtle)" }} />
                     </div>
                   </div>
                 ))}
@@ -259,7 +268,7 @@ export default function ChangeTab({ response, loading }: Props) {
                 {/* Headline */}
                 {response.headline ? (
                   <p
-                    className="text-[13px] font-semibold leading-snug mb-2"
+                    className="text-[13px] font-medium leading-snug mb-2"
                     style={{ color: sentimentColor(response.sentiment) }}
                   >
                     {response.headline}
@@ -275,21 +284,15 @@ export default function ChangeTab({ response, loading }: Props) {
 
                 {/* Narrative */}
                 {response.narrative ? (
-                  <p
-                    className="text-[12px] leading-relaxed"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
+                  <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                     {response.narrative}
                   </p>
                 ) : null}
 
                 {/* Meta line */}
                 <p
-                  className="text-[10px] mt-3 pt-3 border-t"
-                  style={{
-                    color: "var(--text-tertiary)",
-                    borderColor: "var(--divider)",
-                  }}
+                  className="text-[10px] mt-3 pt-3"
+                  style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}
                 >
                   {response.metric_used?.replace(/_/g, " ") ?? "—"}
                   {" · "}
@@ -309,32 +312,18 @@ export default function ChangeTab({ response, loading }: Props) {
                 <span
                   className="text-[10px] font-medium px-2.5 py-0.5 rounded-full"
                   style={{
-                    background: `${sentimentColor(response.sentiment)}22`,
+                    background: sentimentBg(response.sentiment),
                     color: sentimentColor(response.sentiment),
                   }}
                 >
                   {sentimentLabel(response.sentiment)}
                 </span>
-                <button
-                  onClick={() => setSqlOpen((v) => !v)}
-                  className="text-[10px] px-2.5 py-0.5 rounded-full border transition-colors"
-                  style={{
-                    borderColor: "var(--divider)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
+                <PillButton active={sqlOpen} onClick={() => setSqlOpen((v) => !v)}>
                   {sqlOpen ? "Hide SQL" : "Show SQL"}
-                </button>
-                <button
-                  onClick={() => setRetrievalOpen((v) => !v)}
-                  className="text-[10px] px-2.5 py-0.5 rounded-full border transition-colors"
-                  style={{
-                    borderColor: "var(--divider)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
+                </PillButton>
+                <PillButton active={retrievalOpen} onClick={() => setRetrievalOpen((v) => !v)}>
                   {retrievalOpen ? "Hide Retrieval" : "Retrieval"}
-                </button>
+                </PillButton>
               </div>
             )}
 
@@ -369,10 +358,11 @@ export default function ChangeTab({ response, loading }: Props) {
             {/* Error SQL */}
             {response?.error && response.sql && (
               <pre
-                className="text-[11px] p-3 rounded overflow-x-auto mt-2"
+                className="text-[11px] p-3 overflow-x-auto mt-2"
                 style={{
-                  background: "var(--bg-accent)",
+                  background: "var(--bg-subtle)",
                   color: "var(--text-secondary)",
+                  borderRadius: "var(--radius-md)",
                 }}
               >
                 {response.sql}
@@ -385,32 +375,26 @@ export default function ChangeTab({ response, loading }: Props) {
       {/* Expandable: SQL */}
       {sqlOpen && response?.sql && (
         <div
-          className="rounded-xl border p-4"
+          className="p-4"
           style={{
             background: "var(--bg-surface)",
-            borderColor: "var(--divider)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-lg)",
           }}
         >
-          <p
-            className="text-[10px] uppercase tracking-widest font-medium mb-2"
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            Generated SQL
-          </p>
+          <p className="label-caps mb-2">Generated SQL</p>
           <pre
-            className="text-[12px] rounded p-3 overflow-x-auto leading-relaxed"
+            className="text-[12px] p-3 overflow-x-auto leading-relaxed"
             style={{
-              background: "var(--bg-accent)",
+              background: "var(--bg-subtle)",
               color: "var(--text-primary)",
               fontFamily: "ui-monospace, monospace",
+              borderRadius: "var(--radius-md)",
             }}
           >
             {response.sql}
           </pre>
-          <p
-            className="mt-2 text-[10px]"
-            style={{ color: "var(--text-tertiary)" }}
-          >
+          <p className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
             Retrieval {Math.round(response.retrieval_time_ms ?? 0)}ms ·
             SQL gen {Math.round(response.sql_gen_time_ms ?? 0)}ms ·
             Exec {Math.round(response.execution_time_ms ?? 0)}ms ·
@@ -423,18 +407,14 @@ export default function ChangeTab({ response, loading }: Props) {
       {/* Expandable: Retrieval */}
       {retrievalOpen && Array.isArray(response?.retrieved) && (
         <div
-          className="rounded-xl border p-4"
+          className="p-4"
           style={{
             background: "var(--bg-surface)",
-            borderColor: "var(--divider)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-lg)",
           }}
         >
-          <p
-            className="text-[10px] uppercase tracking-widest font-medium mb-3"
-            style={{ color: "var(--text-tertiary)" }}
-          >
-            Top retrievals
-          </p>
+          <p className="label-caps mb-3">Top retrievals</p>
           <div className="space-y-2">
             {(response!.retrieved as Array<{
               id: string;
@@ -445,38 +425,26 @@ export default function ChangeTab({ response, loading }: Props) {
             }>).slice(0, 5).map((r) => (
               <div
                 key={r.id}
-                className="flex items-start gap-3 rounded p-2"
-                style={{ background: "var(--bg-page)" }}
+                className="flex items-start gap-3 p-2"
+                style={{ background: "var(--bg-subtle)", borderRadius: "var(--radius-sm)" }}
               >
                 <span
-                  className="text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded shrink-0 mt-0.5"
+                  className="text-[9px] uppercase font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5"
                   style={{
-                    background:
-                      r.type === "metric"
-                        ? "var(--accent-primary)"
-                        : "var(--sentiment-neutral)",
+                    background: r.type === "metric" ? "var(--accent)" : "var(--text-tertiary)",
                     color: "#fff",
                   }}
                 >
                   {r.type}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p
-                    className="text-[11px] font-medium"
-                    style={{ color: "var(--text-primary)" }}
-                  >
+                  <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>
                     {r.name.replace(/_/g, " ")}
-                    <span
-                      className="ml-2 text-[10px] font-normal"
-                      style={{ color: "var(--text-tertiary)" }}
-                    >
+                    <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--text-tertiary)" }}>
                       score {r.score.toFixed(4)}
                     </span>
                   </p>
-                  <p
-                    className="text-[10px] truncate mt-0.5"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
+                  <p className="text-[10px] truncate mt-0.5" style={{ color: "var(--text-secondary)" }}>
                     {r.text.slice(0, 120)}
                   </p>
                 </div>

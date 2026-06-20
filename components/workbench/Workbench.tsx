@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { Clock, ArrowLeft } from "lucide-react";
 import AnalysisHeader from "./AnalysisHeader";
 import InsightTabs from "./InsightTabs";
 import ChangeTab from "./ChangeTab";
 import ContributionTab from "./ContributionTab";
+import DataOverviewCard from "./DataOverviewCard";
 import { canContribute } from "@/lib/chartUtils";
 
 export interface AskResponse {
@@ -29,6 +31,11 @@ export interface AskResponse {
   detail?: string;
 }
 
+interface HistoryItem {
+  q: string;
+  ts: number;
+}
+
 const SUGGESTED = [
   "What was our total revenue in 2024?",
   "Top 5 customers by order count",
@@ -37,13 +44,18 @@ const SUGGESTED = [
   "Which customers churned recently?",
 ];
 
-const FEATURES = [
-  { icon: "⚡", label: "Natural Language" },
-  { icon: "💬", label: "AI Narration" },
-];
+function relativeTime(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 
 export default function Workbench() {
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,9 +73,10 @@ export default function Workbench() {
     setInput("");
     setActiveTab("change");
 
-    if (!history.includes(q)) {
-      setHistory((h) => [q, ...h].slice(0, 8));
-    }
+    setHistory((h) => {
+      const without = h.filter((item) => item.q !== q);
+      return [{ q, ts: Date.now() }, ...without].slice(0, 8);
+    });
 
     try {
       const res = await fetch("/api/ask", {
@@ -100,207 +113,195 @@ export default function Workbench() {
     }
   }
 
+  function backToOverview() {
+    setResponse(null);
+    setActiveQuestion(null);
+    setInput("");
+  }
+
+  const isLanding = !response && !loading;
+
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bg-page)" }}>
+    <div className="max-w-5xl w-full mx-auto">
+      {/* ── Persistent ask bar ─────────────────────────────────────────────── */}
+      <div className="flex gap-2 items-stretch">
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              ask(input);
+            }
+          }}
+          placeholder="Ask anything about Northwind Furniture — revenue, margins, customers…"
+          disabled={loading}
+          rows={1}
+          className="input-glow flex-1 resize-none text-sm leading-snug transition-all disabled:opacity-50"
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            color: "var(--text-primary)",
+            padding: "10px 14px",
+          }}
+        />
+        <button
+          onClick={() => ask(input)}
+          disabled={loading || !input.trim()}
+          className="shrink-0 text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            background: "var(--accent)",
+            borderRadius: "var(--radius-md)",
+            padding: "0 22px",
+          }}
+          onMouseEnter={(e) => {
+            if (!loading && input.trim()) e.currentTarget.style.background = "var(--accent-hover)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "var(--accent)";
+          }}
+        >
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              Thinking
+            </span>
+          ) : (
+            "Ask"
+          )}
+        </button>
+      </div>
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <header
-        className="sticky top-0 z-20 border-b"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--divider)" }}
-      >
-        <div className="max-w-5xl mx-auto px-6 py-4">
-
-          {/* Brand + dataset row */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              {/* Logo mark */}
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: "linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)" }}
+      {/* ── Landing (inhabited empty state) ────────────────────────────────── */}
+      {isLanding && (
+        <div className="mt-4 space-y-6">
+          {/* Suggested question chips */}
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTED.map((q) => (
+              <button
+                key={q}
+                onClick={() => ask(q)}
+                className="transition-colors"
+                style={{
+                  fontSize: 11,
+                  padding: "5px 12px",
+                  borderRadius: 14,
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-surface)",
+                  color: "var(--text-primary)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--accent)";
+                  e.currentTarget.style.color = "var(--accent)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text-primary)";
+                }}
               >
-                <span className="text-white text-xs font-bold">AE</span>
-              </div>
-              <span className="font-bold text-lg tracking-tight gradient-text">AskERP</span>
-              <div
-                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium"
-                style={{ background: "var(--bg-accent)", color: "var(--text-secondary)", border: "1px solid var(--divider2)" }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Northwind Furniture ERP
-              </div>
-            </div>
-
-            {/* Feature pills — right side */}
-            <div className="hidden md:flex items-center gap-2">
-              {FEATURES.map((f) => (
-                <span
-                  key={f.label}
-                  className="text-[10px] px-2 py-1 rounded-full font-medium"
-                  style={{ background: "var(--bg-accent)", color: "var(--text-tertiary)", border: "1px solid var(--divider)" }}
-                >
-                  {f.icon} {f.label}
-                </span>
-              ))}
-            </div>
+                {q}
+              </button>
+            ))}
           </div>
 
-          {/* Ask input */}
-          <div className="flex gap-3 items-start">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  ask(input);
-                }
-              }}
-              placeholder="Ask anything about Northwind Furniture — revenue, margins, customers, orders…"
-              disabled={loading}
-              rows={1}
-              className="input-glow flex-1 resize-none rounded-xl px-4 py-3 text-sm leading-snug border transition-all disabled:opacity-40"
-              style={{
-                background: "var(--bg-input)",
-                border: "1.5px solid var(--divider2)",
-                color: "var(--text-primary)",
-              }}
-            />
-            <button
-              onClick={() => ask(input)}
-              disabled={loading || !input.trim()}
-              className="btn-gradient shrink-0 px-6 py-3 rounded-xl text-sm font-semibold text-white"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                  Thinking
-                </span>
-              ) : "Ask"}
-            </button>
+          {/* Connected data source */}
+          <div>
+            <p className="label-caps mb-2">Connected data source</p>
+            <DataOverviewCard />
           </div>
 
-          {/* Suggested / History chips */}
-          <div className="flex flex-wrap gap-1.5 mt-3">
+          {/* Recent analyses */}
+          <div>
+            <p className="label-caps mb-2">Recent analyses</p>
             {history.length === 0 ? (
-              SUGGESTED.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => ask(q)}
-                  disabled={loading}
-                  className="text-[11px] px-3 py-1 rounded-full border transition-all disabled:opacity-40 hover:border-indigo-500/50 hover:text-indigo-300"
-                  style={{ borderColor: "var(--divider2)", color: "var(--text-secondary)", background: "transparent" }}
-                >
-                  {q}
-                </button>
-              ))
+              <div
+                className="rounded-xl"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px dashed var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  padding: "16px",
+                }}
+              >
+                <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                  Your recent questions will appear here.
+                </p>
+              </div>
             ) : (
-              <>
-                <span className="text-[10px] self-center uppercase tracking-widest mr-1" style={{ color: "var(--text-tertiary)" }}>
-                  Recent:
-                </span>
-                {history.map((q) => {
-                  const isActive = q === activeQuestion;
-                  return (
-                    <button
-                      key={q}
-                      onClick={() => !loading && ask(q)}
-                      disabled={loading}
-                      className="text-[11px] px-3 py-1 rounded-full border transition-all disabled:opacity-40"
-                      style={{
-                        borderColor: isActive ? "var(--accent-primary)" : "var(--divider2)",
-                        color: isActive ? "var(--accent-primary)" : "var(--text-secondary)",
-                        background: isActive ? "var(--accent-glow)" : "transparent",
-                        fontWeight: isActive ? 500 : 400,
-                      }}
+              <div className="space-y-1.5">
+                {history.map((item) => (
+                  <button
+                    key={item.q}
+                    onClick={() => ask(item.q)}
+                    className="w-full flex items-center gap-3 text-left transition-colors"
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "10px 12px",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--accent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border)";
+                    }}
+                  >
+                    <Clock size={14} style={{ color: "var(--text-tertiary)" }} className="shrink-0" />
+                    <span
+                      className="flex-1 truncate"
+                      style={{ fontSize: 13, color: "var(--text-primary)" }}
                     >
-                      {q.length > 45 ? q.slice(0, 42) + "…" : q}
-                    </button>
-                  );
-                })}
-              </>
+                      {item.q}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }} className="shrink-0">
+                      {relativeTime(item.ts)}
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
-      </header>
+      )}
 
-      {/* ── Results ──────────────────────────────────────────────────────── */}
-      <main className="flex-1 px-6 py-6 max-w-5xl w-full mx-auto">
+      {/* ── Answered / loading state ───────────────────────────────────────── */}
+      {!isLanding && (() => {
+        const cols = response?.columns ?? [];
+        const rows = response?.rows ?? [];
+        const hasData = !response?.error && cols.length > 0 && rows.length > 0;
+        const enabledTabs: Record<string, boolean> = {
+          change: true,
+          contribution: hasData && canContribute(cols, rows),
+        };
+        const safeTab = enabledTabs[activeTab] ? activeTab : "change";
 
-        {/* Empty state */}
-        {!response && !loading && (
-          <div className="flex flex-col items-center justify-center pt-20 text-center">
-            {/* Icon mark */}
-            <div className="relative mb-8">
-              <div
-                className="w-20 h-20 rounded-2xl flex items-center justify-center"
-                style={{
-                  background: "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.15) 100%)",
-                  border: "1px solid rgba(99,102,241,0.25)",
-                  boxShadow: "0 0 48px rgba(99,102,241,0.12)",
-                }}
-              >
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Bar chart bars */}
-                  <rect x="4" y="20" width="6" height="12" rx="1.5" fill="#6366F1" opacity="0.5"/>
-                  <rect x="13" y="13" width="6" height="19" rx="1.5" fill="#6366F1" opacity="0.75"/>
-                  <rect x="22" y="8" width="6" height="24" rx="1.5" fill="#6366F1"/>
-                  {/* Sparkle / AI dot */}
-                  <circle cx="29" cy="6" r="3" fill="#8B5CF6"/>
-                  <path d="M29 3.5V2M29 10V8.5M26.5 6H25M33 6H31.5M27.1 4.1L26.05 3.05M31.9 7.9L30.85 6.85M27.1 7.9L26.05 8.95M31.9 4.1L30.85 5.15" stroke="#A78BFA" strokeWidth="1" strokeLinecap="round"/>
-                </svg>
-              </div>
-            </div>
-
-            <h2 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-              What do you want to know?
-            </h2>
-            <p className="text-sm mb-8 max-w-sm" style={{ color: "var(--text-secondary)" }}>
-              Ask a plain-English question about Northwind Furniture&apos;s ERP data.
-              The AI agent figures out the rest.
-            </p>
-
-            {/* Feature cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
-              {[
-                { icon: "💬", title: "AI Narration", desc: "Plain-English insight with every result" },
-                { icon: "📋", title: "Data Table", desc: "Full results with formatting" },
-              ].map((f) => (
-                <div
-                  key={f.title}
-                  className="rounded-xl p-4 text-left"
-                  style={{ background: "var(--bg-card)", border: "1px solid var(--divider)" }}
-                >
-                  <p className="text-xl mb-2">{f.icon}</p>
-                  <p className="text-[12px] font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{f.title}</p>
-                  <p className="text-[11px] leading-snug" style={{ color: "var(--text-tertiary)" }}>{f.desc}</p>
-                </div>
-              ))}
-            </div>
+        return (
+          <div className="mt-4 space-y-4">
+            <button
+              onClick={backToOverview}
+              disabled={loading}
+              className="flex items-center gap-1.5 transition-colors disabled:opacity-40"
+              style={{ fontSize: 12, color: "var(--text-secondary)" }}
+              onMouseEnter={(e) => {
+                if (!loading) e.currentTarget.style.color = "var(--accent)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--text-secondary)";
+              }}
+            >
+              <ArrowLeft size={14} />
+              Back to overview
+            </button>
+            <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} />
+            <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
+            {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
+            {safeTab === "contribution" && response && <ContributionTab response={response} />}
           </div>
-        )}
-
-        {/* Analysis output */}
-        {(response || loading) && (() => {
-          const cols = response?.columns ?? [];
-          const rows = response?.rows ?? [];
-          const hasData = !response?.error && cols.length > 0 && rows.length > 0;
-          const enabledTabs: Record<string, boolean> = {
-            change: true,
-            contribution: hasData && canContribute(cols, rows),
-          };
-          const safeTab = enabledTabs[activeTab] ? activeTab : "change";
-
-          return (
-            <div className="space-y-4">
-              <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} />
-              <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
-              {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
-              {safeTab === "contribution" && response && <ContributionTab response={response} />}
-            </div>
-          );
-        })()}
-      </main>
+        );
+      })()}
     </div>
   );
 }
