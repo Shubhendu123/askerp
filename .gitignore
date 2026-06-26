@@ -44,3 +44,6 @@ data/metrics_verify_output.txt
 data/retrieval_eval_v1.txt
 data/retrieval_eval_v2.txt
 data/retrieval_eval_v2_full.log
+
+db_rebuild/build/askerp.duckdb
+data/*.duckdb

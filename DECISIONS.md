@@ -267,3 +267,23 @@ This document captures the meaningful decisions made during the build, in the fo
 **Decision:** Add a left nav rail (Ask active; Dashboard/Saved/Data as structural stubs) and a top header with brand + context. Replace the empty void with an inhabited landing: search, suggested chips, a live data-overview card (real warehouse stats via /api/warehouse-stats), and recent analyses.
 
 **Tradeoffs:** Dashboard/Saved/Data nav items are non-functional stubs in the demo — structural signals, not working features. The data-overview card adds a DB query on landing (cached 60s). In exchange: the product reads as real enterprise software with navigational structure and a canvas that feels connected to live data.
+
+---
+
+### D-027: Port retrieval to TypeScript with Voyage AI embeddings for serverless live path
+
+**Context:** The Python hybrid retriever (retriever/hybrid_retriever.py) uses sentence-transformers + rank_bm25 + a cross-encoder reranker — none of which can run on Vercel serverless (binary native addons, Python runtime requirement). The retriever was standalone and not wired into /api/ask.
+**Options considered:**
+- Keep Python retriever + proxy via an always-on service (Railway, Fly.io): adds infra complexity, cold-start latency, extra cost, and a single-point-of-failure dependency.
+- Port to TypeScript + serverless-safe embedding API: all logic runs in-process on Vercel, no external service dependency; embedding API latency replaces model load latency.
+- Use OpenAI/Cohere embeddings: possible but Voyage was already used in Python experiments and voyage-3-lite is optimized for retrieval at low cost.
+**Decision:** TS port with Voyage AI (voyage-3-lite) for dense embeddings via REST, hand-rolled BM25 Okapi for sparse, RRF (k=60) for fusion. Reranker dropped — no serverless-friendly cross-encoder; cross-encoder was the last step in the Python pipeline and required native binaries.
+**Tradeoffs:** +~200–400ms per request for Voyage embedding API call vs. local model inference; corpus embeddings cached in module memory across warm invocations (cold start embeds all 24 docs). Reranker dropped reduces ranking quality at the margin; RRF alone is sufficient for a 24-doc corpus. Env var `USE_RETRIEVAL` gates the prompt path for A/B comparison without a deploy.
+
+---
+
+### D-028: schema-in-prompt swap (commit 8ad9de0) — retroactive log
+
+**Context:** An earlier commit (8ad9de0) swapped the SQL generator from retrieved-context prompting to full schema-in-prompt without a logged decision. This retroactively documents that change for honest history.
+**Decision made at commit 8ad9de0:** Use full schema.yaml + metrics.yaml in the system prompt rather than retrieved chunks. This was the pragmatic unblocking step when the Python retriever was stranded.
+**Tradeoffs:** Full-schema prompt works reliably for the current 9-table DB. Token cost grows linearly as schema grows; retrieval becomes necessary at ~20+ tables to keep prompts manageable. D-027 (this session) restores the retrieval path and gates it behind `USE_RETRIEVAL` for controlled comparison.

@@ -1,22 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
+import type { RetrievalResult } from "./retrieval/retriever";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Load schema + metrics once at module level
+// USE_RETRIEVAL=true → prompt built from retrieved chunks only; false → full schema in prompt (A/B flag)
+export const USE_RETRIEVAL = process.env.USE_RETRIEVAL === "true";
+
 const ROOT = process.cwd();
 const schemaYaml = fs.readFileSync(path.join(ROOT, "data", "schema.yaml"), "utf-8");
 const metricsYaml = fs.readFileSync(path.join(ROOT, "data", "metrics.yaml"), "utf-8");
 
-const SYSTEM = `You are a SQL generator for a DuckDB analytics warehouse for Northwind Furniture, a ~$50M B2B furniture company.
+const SYSTEM_BASE = `You are a SQL generator for a DuckDB analytics warehouse for Northwind Furniture, a ~$50M B2B furniture company.`;
 
-DATABASE SCHEMA:
-${schemaYaml}
-
-SEMANTIC LAYER (metrics with formulas):
-${metricsYaml}
-
+const SYSTEM_RULES = `
 RULES:
 1. Return ONLY valid DuckDB SQL — no CTEs unless necessary
 2. Always filter fact_sales_order to exclude Cancelled/Pending unless the user asks about cancellations
@@ -42,6 +40,28 @@ Output ONLY this JSON object — no markdown, no explanation:
   "reasoning": "one sentence",
   "confidence": "HIGH | MEDIUM | LOW"
 }`;
+
+// Full-schema prompt (USE_RETRIEVAL=false)
+const SYSTEM_FULL = `${SYSTEM_BASE}
+
+DATABASE SCHEMA:
+${schemaYaml}
+
+SEMANTIC LAYER (metrics with formulas):
+${metricsYaml}
+${SYSTEM_RULES}`;
+
+function buildRetrievedSystem(chunks: RetrievalResult[]): string {
+  const tables = chunks.filter((c) => c.type === "table");
+  const metrics = chunks.filter((c) => c.type === "metric");
+  const tableSection = tables.length > 0
+    ? `RETRIEVED SCHEMA CONTEXT (top ${tables.length} relevant tables):\n${tables.map((c) => c.text).join("\n\n")}`
+    : "";
+  const metricSection = metrics.length > 0
+    ? `RETRIEVED METRIC CONTEXT (top ${metrics.length} relevant metrics):\n${metrics.map((c) => c.text).join("\n\n")}`
+    : "";
+  return [SYSTEM_BASE, tableSection, metricSection, SYSTEM_RULES].filter(Boolean).join("\n\n");
+}
 
 const FEW_SHOT = `FEW-SHOT EXAMPLES:
 
@@ -70,13 +90,21 @@ export interface SQLResult {
   error?: string;
 }
 
-export async function generateSQL(question: string): Promise<SQLResult> {
+export async function generateSQL(
+  question: string,
+  retrievedChunks?: RetrievalResult[]
+): Promise<SQLResult> {
+  const system =
+    USE_RETRIEVAL && retrievedChunks && retrievedChunks.length > 0
+      ? buildRetrievedSystem(retrievedChunks)
+      : SYSTEM_FULL;
+
   const userMsg = `${FEW_SHOT}\n\nQUESTION: ${question}\n\nGenerate the SQL now. Output only the JSON object.`;
 
   const msg = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 1024,
-    system: SYSTEM,
+    system,
     messages: [{ role: "user", content: userMsg }],
   });
 
