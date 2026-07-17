@@ -287,3 +287,34 @@ This document captures the meaningful decisions made during the build, in the fo
 **Context:** An earlier commit (8ad9de0) swapped the SQL generator from retrieved-context prompting to full schema-in-prompt without a logged decision. This retroactively documents that change for honest history.
 **Decision made at commit 8ad9de0:** Use full schema.yaml + metrics.yaml in the system prompt rather than retrieved chunks. This was the pragmatic unblocking step when the Python retriever was stranded.
 **Tradeoffs:** Full-schema prompt works reliably for the current 9-table DB. Token cost grows linearly as schema grows; retrieval becomes necessary at ~20+ tables to keep prompts manageable. D-027 (this session) restores the retrieval path and gates it behind `USE_RETRIEVAL` for controlled comparison.
+
+---
+
+### D-029: Multi-tenant isolation via schema-per-tenant
+
+**Context:** AskERP's warehouse must serve multiple tenants (D-003 committed to multi-tenancy from the start). Tenant 2 (MRO distributor) is being added as the main demo; Northwind Furniture is retained as Tenant 1.
+**Options considered:** Separate DuckDB files per tenant (isolation but no cross-tenant conformity story), one shared schema with tenant_id columns (row-level isolation, leaky), schema-per-tenant in one DuckDB file.
+**Decision:** Schema-per-tenant. Northwind = Tenant 1 (currently the `main` schema), MRO = Tenant 2 (`mro_distributor` schema), same DuckDB file. Mirrors NSAW's per-instance isolation model; subsidiary is a within-tenant dimension, not a tenant boundary.
+**Tradeoffs:** One file grows large (187MB+ with MRO), motivating D-032. In exchange: hard namespace isolation per tenant, no tenant_id predicate to forget, and the "how does this scale to 2000 customers" answer stays structural. Note: the Northwind persona is retired as the demo narrative, but the tenant is retained as the multi-tenancy basis.
+
+### D-030: Subject-area-prefixed naming + conformed dimensions (NSAW-shaped)
+
+**Context:** The MRO warehouse needed a naming/structure convention that reads as NSAW rather than a toy star schema.
+**Options considered:** Flat naming (Northwind-style dim_/fact_), subject-area schemas (o2c.*, p2p.* — over-nested for DuckDB), subject-area table prefixes within one tenant schema.
+**Decision:** 8 conformed dimensions (dim_date, dim_item, dim_customer, dim_supplier, dim_warehouse, dim_gl_account, dim_employee, dim_subsidiary) shared across 12 facts prefixed by subject area: o2c_, ar_, p2p_, inv_, gl_ — 20 tables across 5 NSAW subject areas. 20 by design, not ~25-35: breadth without filler tables.
+**Tradeoffs:** Prefixes make table names longer. In exchange: cross-subject-area joins flow through conformed dims (the killer-query pattern), retrieval chunks can carry subject-area context, and the schema is large enough that schema-in-prompt stops being viable — which is the point (root problem behind D-028).
+
+### D-031: Synthetic data carries planted, correlated business signal
+
+**Context:** Random-but-correctly-shaped data cannot demonstrate causal analytics. The MRO tenant (NA B2B MRO distributor persona, ~$300M revenue, 18 months from 2024-07, SEED=42) needed data where a real question has a real, discoverable answer.
+**Decision:** Generator plants a supplier→cash causal chain — supplier reliability_tier A→D drives PO late_days (gamma, mean 0.5/2.5/8/16d) → stockouts → inflated order_to_ship_days → invoice at ship date → higher DSO — plus business realism: supplier spend Pareto (lognormal; top 20% ≈ 74% of spend), customer revenue Pareto (top 20% ≈ 63%), category-differentiated margins (Fasteners 21% → MRO 43%), payment heterogeneity (15% chronic slow payers: 61d vs 41d weighted DSO), SKU velocity classes A/B/C, ~8% YoY growth with Q4 uplift and weekend dips.
+**Verified (2026-07-17, db_rebuild/verify_mro.py, all pass):** 20 tables, 2.33M rows, $298M annualized revenue, DSO 44d, DPO 39d, DIO 85d, CCC 89d, and a monotonic killer-query gradient A→D (late_days 0.1→15.1, stockout 2.7%→13.3%, order-to-ship 2.0→7.0d) joining P2P+INV+O2C+AR through conformed dims.
+**Deviations from the clean-room reference:** one tuning change — vendor bill payment slack +2d (pay slightly past terms) to bring CCC from 91d into the ≤90d band; DPO stayed in its 35-45d target. DB path wired from build/askerp.duckdb to data/northwind.db per integration spec.
+**Note:** This is a deliberate departure from D-011 (Northwind's uniform-not-Pareto customer distribution). Realism is required for the MRO demo tenant; D-011 stands for Northwind. Architecturally this fulfills the multi-tenant basis laid down in D-003.
+
+### D-032: Warehouse hosting = MotherDuck (storage/compute separation)
+
+**Context:** The combined DuckDB file is now ~200MB with the MRO tenant loaded. Vercel serverless functions cannot bundle it (northwind.db at 14MB could be committed and bundled; the MRO-loaded file cannot).
+**Options considered:** Commit the large file anyway (bloats repo, exceeds serverless bundle limits), always-on DB service (Postgres etc. — loses DuckDB dialect, adds infra), MotherDuck (DuckDB-native cloud with storage/compute separation).
+**Decision:** MotherDuck for deployment. DuckDB dialect preserved; serverless-safe via thin client / Postgres-protocol endpoint — no native binary, the same constraint class D-027 solved for embeddings. DB files are gitignored (`*.duckdb`); local dev may still use the local file.
+**Tradeoffs:** Adds a hosted dependency and network latency to the query path. This ADR logs the decision only — wiring MotherDuck is a separate later step, not part of the warehouse build.
