@@ -345,6 +345,58 @@ async function ensureInit(): Promise<void> {
   await _initPromise;
 }
 
+// ── Test path (benchmark, D-036) ───────────────────────────────────────────────
+// Exposes each ranker separately. Production default path is retrieve() below
+// (rrf) and is unchanged.
+
+export type BenchmarkRanker = "bm25" | "dense" | "rrf";
+
+export async function getTenantChunks(tenant: string): Promise<Array<{ id: string; type: string; name: string; text: string }>> {
+  await ensureInit();
+  const index = _tenants!.get(tenant);
+  if (!index) throw new Error(`Unknown tenant '${tenant}'`);
+  return index.chunks.map((c) => ({ id: c.id, type: c.type, name: c.name, text: c.text }));
+}
+
+export async function retrieveWithRanker(
+  query: string,
+  k: number,
+  tenant: string,
+  ranker: BenchmarkRanker
+): Promise<RetrieveResponse> {
+  if (ranker === "rrf") return retrieve(query, k, tenant);
+
+  await ensureInit();
+  const index = _tenants!.get(tenant);
+  if (!index) throw new Error(`Unknown tenant '${tenant}'`);
+
+  let ranked: number[];
+  let scores: number[];
+  if (ranker === "bm25") {
+    const raw = bm25Scores(index.bm25, query);
+    ranked = raw.map((s, i) => ({ i, s })).sort((a, b) => b.s - a.s).map((x) => x.i);
+    const max = Math.max(...raw, 1e-9);
+    scores = ranked.slice(0, k).map((i) => Math.max(0, raw[i] / max)); // normalized for confidence bands
+  } else {
+    const [queryEmb] = await voyageEmbed([query], "query");
+    const dense = index.embeddings.map((emb) => cosine(queryEmb, emb));
+    ranked = dense.map((s, i) => ({ i, s })).sort((a, b) => b.s - a.s).map((x) => x.i);
+    scores = ranked.slice(0, k).map((i) => Math.max(0, dense[i]));
+  }
+
+  const topK = ranked.slice(0, k);
+  return {
+    results: topK.map((i, rank) => ({
+      id: index.chunks[i].id,
+      type: index.chunks[i].type,
+      name: index.chunks[i].name,
+      score: Math.round(scores[rank] * 10000) / 10000,
+      text: index.chunks[i].text,
+    })),
+    confidence: computeConfidence(scores),
+  };
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export async function retrieve(query: string, k = 5, tenant?: string): Promise<RetrieveResponse> {

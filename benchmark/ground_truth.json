@@ -1,0 +1,1264 @@
+{
+ "H01": {
+  "question": "Which late suppliers are hurting our cash flow the most, and through which SKUs?",
+  "sql": "WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        sup AS (SELECT s.supplier_key, s.supplier_name, s.reliability_tier, AVG(po.late_days) late\n                FROM mro_distributor.p2p_purchase_order_line po JOIN mro_distributor.dim_supplier s USING (supplier_key) GROUP BY 1,2,3),\n        rev AS (SELECT m.supplier_key, SUM(sol.ext_amount) affected_revenue\n                FROM mro_distributor.o2c_sales_order_line sol JOIN item_supplier m USING (item_key) GROUP BY 1)\n        SELECT sup.supplier_name, sup.reliability_tier, ROUND(sup.late,1) AS avg_late_days,\n               ROUND(rev.affected_revenue,2) AS affected_revenue\n        FROM sup JOIN rev USING (supplier_key)\n        WHERE sup.late > 5 ORDER BY rev.affected_revenue DESC LIMIT 5",
+  "columns": [
+   "supplier_name",
+   "reliability_tier",
+   "avg_late_days",
+   "affected_revenue"
+  ],
+  "result": [
+   [
+    "Supplier 066",
+    "D",
+    15.1,
+    15096513.54
+   ],
+   [
+    "Supplier 097",
+    "D",
+    15.2,
+    12394340.05
+   ],
+   [
+    "Supplier 073",
+    "C",
+    7.3,
+    8062443.96
+   ],
+   [
+    "Supplier 065",
+    "C",
+    7.0,
+    5599973.58
+   ],
+   [
+    "Supplier 056",
+    "C",
+    7.3,
+    5258937.61
+   ]
+  ],
+  "sanity_note": "top suppliers must be tier C/D"
+ },
+ "H02": {
+  "question": "Explain whether our CCC problem is driven more by slow customers, excess inventory, or supplier payment timing.",
+  "sql": "SELECT 'DSO' AS component, ROUND((SELECT SUM(days_to_pay*amount_applied)/SUM(amount_applied) FROM mro_distributor.ar_payment_application),2) AS days\n        UNION ALL\n        SELECT 'DIO', ROUND((SELECT (SELECT AVG(dv) FROM (SELECT snapshot_date_key, SUM(value_on_hand) dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1))\n                             / (SELECT SUM(ext_cost)/COUNT(DISTINCT order_date_key) FROM mro_distributor.o2c_sales_order_line)),2)\n        UNION ALL\n        SELECT 'DPO', ROUND((SELECT SUM(days_to_pay*amount_paid)/SUM(amount_paid) FROM mro_distributor.p2p_bill_payment),2)",
+  "columns": [
+   "component",
+   "days"
+  ],
+  "result": [
+   [
+    "DSO",
+    44.02
+   ],
+   [
+    "DIO",
+    83.45
+   ],
+   [
+    "DPO",
+    39.24
+   ]
+  ],
+  "sanity_note": "DIO must be the largest component"
+ },
+ "H03": {
+  "question": "Which suppliers are late but still being paid faster than average?",
+  "sql": "WITH sup_late AS (SELECT supplier_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1),\n        sup_pay AS (SELECT supplier_key, SUM(days_to_pay*amount_paid)/SUM(amount_paid) pay FROM mro_distributor.p2p_bill_payment GROUP BY 1)\n        SELECT s.supplier_name, s.reliability_tier, ROUND(l.late,1) AS avg_late_days, ROUND(p.pay,1) AS days_to_pay\n        FROM sup_late l JOIN sup_pay p USING (supplier_key) JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        WHERE l.late > (SELECT AVG(late_days) FROM mro_distributor.p2p_purchase_order_line)\n          AND p.pay < (SELECT SUM(days_to_pay*amount_paid)/SUM(amount_paid) FROM mro_distributor.p2p_bill_payment)\n        ORDER BY l.late DESC",
+  "columns": [
+   "supplier_name",
+   "reliability_tier",
+   "avg_late_days",
+   "days_to_pay"
+  ],
+  "result": [
+   [
+    "Supplier 097",
+    "D",
+    15.2,
+    32.5
+   ],
+   [
+    "Supplier 032",
+    "D",
+    13.9,
+    31.8
+   ],
+   [
+    "Supplier 037",
+    "C",
+    7.9,
+    33.3
+   ],
+   [
+    "Supplier 062",
+    "C",
+    7.7,
+    29.2
+   ],
+   [
+    "Supplier 013",
+    "C",
+    7.7,
+    31.0
+   ],
+   [
+    "Supplier 073",
+    "C",
+    7.3,
+    32.7
+   ],
+   [
+    "Supplier 057",
+    "C",
+    6.7,
+    30.6
+   ],
+   [
+    "Supplier 088",
+    "C",
+    6.6,
+    32.5
+   ],
+   [
+    "Supplier 055",
+    "C",
+    5.7,
+    31.5
+   ],
+   [
+    "Supplier 005",
+    "B",
+    2.7,
+    35.0
+   ],
+   [
+    "Supplier 090",
+    "B",
+    2.4,
+    31.2
+   ],
+   [
+    "Supplier 019",
+    "B",
+    2.2,
+    30.5
+   ],
+   [
+    "Supplier 043",
+    "B",
+    2.2,
+    28.6
+   ],
+   [
+    "Supplier 085",
+    "B",
+    2.2,
+    29.5
+   ],
+   [
+    "Supplier 089",
+    "B",
+    2.2,
+    30.9
+   ]
+  ],
+  "sanity_note": "listed suppliers are late (above-avg) yet paid faster than the 39d weighted average"
+ },
+ "H04": {
+  "question": "Which item categories create the worst combination of high DIO and high stockout rate?",
+  "sql": "WITH cat_inv AS (\n          SELECT i.category, AVG(dv) avg_inv, AVG(so_pct) stockout_pct FROM (\n            SELECT snap.item_key, snap.snapshot_date_key, SUM(snap.value_on_hand) dv,\n                   AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END) so_pct\n            FROM mro_distributor.inv_balance_snapshot snap GROUP BY 1,2) x\n          JOIN mro_distributor.dim_item i USING (item_key) GROUP BY 1),\n        cat_daily AS (\n          SELECT i.category, SUM(dv)/COUNT(DISTINCT snapshot_date_key) daily_inv\n          FROM (SELECT item_key, snapshot_date_key, SUM(value_on_hand) dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1,2) x\n          JOIN mro_distributor.dim_item i USING (item_key) GROUP BY 1),\n        cat_cogs AS (\n          SELECT i.category, SUM(sol.ext_cost)/COUNT(DISTINCT sol.order_date_key) daily_cogs\n          FROM mro_distributor.o2c_sales_order_line sol JOIN mro_distributor.dim_item i USING (item_key) GROUP BY 1),\n        cat_so AS (\n          SELECT i.category, AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END) stockout_pct\n          FROM mro_distributor.inv_balance_snapshot snap JOIN mro_distributor.dim_item i USING (item_key) GROUP BY 1)\n        SELECT d.category, ROUND(d.daily_inv/c.daily_cogs,1) AS dio_days, ROUND(so.stockout_pct,2) AS stockout_pct\n        FROM cat_daily d JOIN cat_cogs c USING (category) JOIN cat_so so USING (category)\n        ORDER BY (d.daily_inv/c.daily_cogs) * so.stockout_pct DESC",
+  "columns": [
+   "category",
+   "dio_days",
+   "stockout_pct"
+  ],
+  "result": [
+   [
+    "Safety",
+    94.9,
+    3.6
+   ],
+   [
+    "Fasteners",
+    86.1,
+    3.93
+   ],
+   [
+    "Tools",
+    82.9,
+    4.06
+   ],
+   [
+    "Electrical",
+    75.2,
+    4.24
+   ],
+   [
+    "MRO",
+    81.7,
+    3.86
+   ]
+  ],
+  "sanity_note": "ranking driven by stockout x dio product"
+ },
+ "H05": {
+  "question": "Which customer segments generate high revenue but worsen cash conversion due to delayed payments?",
+  "sql": "WITH seg_rev AS (\n          SELECT c.segment, SUM(sol.ext_amount) revenue\n          FROM mro_distributor.o2c_sales_order_line sol JOIN mro_distributor.dim_customer c USING (customer_key) GROUP BY 1),\n        seg_pay AS (\n          SELECT c.segment, SUM(pa.days_to_pay*pa.amount_applied)/SUM(pa.amount_applied) dtp\n          FROM mro_distributor.ar_payment_application pa JOIN mro_distributor.dim_customer c USING (customer_key) GROUP BY 1)\n        SELECT r.segment, ROUND(r.revenue,2) AS revenue, ROUND(p.dtp,1) AS collection_days\n        FROM seg_rev r JOIN seg_pay p USING (segment) ORDER BY r.revenue DESC",
+  "columns": [
+   "segment",
+   "revenue",
+   "collection_days"
+  ],
+  "result": [
+   [
+    "Manufacturing",
+    195949047.19,
+    43.8
+   ],
+   [
+    "Facilities",
+    100858313.44,
+    42.2
+   ],
+   [
+    "Construction",
+    99933378.09,
+    45.8
+   ],
+   [
+    "Government",
+    50422763.68,
+    45.0
+   ]
+  ],
+  "sanity_note": "segment view: revenue + collection days"
+ },
+ "H06": {
+  "question": "Which subsidiaries have the highest CCC, and which component is responsible: DSO, DIO, or DPO?",
+  "sql": "WITH sub_dso AS (\n          SELECT subsidiary_key, SUM(days_to_pay*amount_applied)/SUM(amount_applied) dso\n          FROM mro_distributor.ar_payment_application GROUP BY 1),\n        sub_dpo AS (\n          SELECT subsidiary_key, SUM(days_to_pay*amount_paid)/SUM(amount_paid) dpo\n          FROM mro_distributor.p2p_bill_payment GROUP BY 1),\n        sub_inv AS (\n          SELECT subsidiary_key, SUM(dv)/COUNT(DISTINCT snapshot_date_key) daily_inv FROM\n            (SELECT subsidiary_key, snapshot_date_key, SUM(value_on_hand) dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1,2) x\n          GROUP BY 1),\n        sub_cogs AS (\n          SELECT subsidiary_key, SUM(ext_cost)/COUNT(DISTINCT order_date_key) daily_cogs\n          FROM mro_distributor.o2c_sales_order_line GROUP BY 1)\n        SELECT sub.subsidiary_name,\n               ROUND(dso.dso,1) AS dso_days,\n               ROUND(COALESCE(inv.daily_inv/cogs.daily_cogs, 0),1) AS dio_days,\n               ROUND(dpo.dpo,1) AS dpo_days,\n               ROUND(dso.dso + COALESCE(inv.daily_inv/cogs.daily_cogs, 0) - dpo.dpo,1) AS ccc_days\n        FROM mro_distributor.dim_subsidiary sub\n        JOIN sub_dso dso USING (subsidiary_key)\n        JOIN sub_dpo dpo USING (subsidiary_key)\n        JOIN sub_cogs cogs USING (subsidiary_key)\n        LEFT JOIN sub_inv inv USING (subsidiary_key)\n        ORDER BY ccc_days DESC",
+  "columns": [
+   "subsidiary_name",
+   "dso_days",
+   "dio_days",
+   "dpo_days",
+   "ccc_days"
+  ],
+  "result": [
+   [
+    "MRO Distribution US",
+    44.1,
+    138.7,
+    39.3,
+    143.4
+   ],
+   [
+    "MRO Industrial Supply",
+    43.9,
+    0.0,
+    39.0,
+    4.9
+   ],
+   [
+    "MRO Distribution Canada",
+    43.9,
+    0.0,
+    39.1,
+    4.8
+   ]
+  ],
+  "sanity_note": "subsidiary 1 carries all inventory (data quirk) so its CCC dominates via DIO"
+ },
+ "H07": {
+  "question": "Which suppliers indirectly delay customer cash collection through late receipts and delayed fulfillment?",
+  "sql": "WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        sup_late AS (SELECT supplier_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1),\n        sup_ots AS (\n          SELECT m.supplier_key, AVG(ff.order_to_ship_days) ots\n          FROM mro_distributor.o2c_fulfillment_line ff JOIN item_supplier m USING (item_key) GROUP BY 1)\n        SELECT s.supplier_name, s.reliability_tier, ROUND(l.late,1) AS avg_late_days, ROUND(o.ots,1) AS avg_order_to_ship_days\n        FROM sup_late l JOIN sup_ots o USING (supplier_key) JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        WHERE l.late > 5 ORDER BY o.ots DESC LIMIT 10",
+  "columns": [
+   "supplier_name",
+   "reliability_tier",
+   "avg_late_days",
+   "avg_order_to_ship_days"
+  ],
+  "result": [
+   [
+    "Supplier 097",
+    "D",
+    15.2,
+    7.0
+   ],
+   [
+    "Supplier 066",
+    "D",
+    15.1,
+    7.0
+   ],
+   [
+    "Supplier 040",
+    "D",
+    14.5,
+    7.0
+   ],
+   [
+    "Supplier 084",
+    "D",
+    14.8,
+    6.9
+   ],
+   [
+    "Supplier 003",
+    "D",
+    16.2,
+    6.9
+   ],
+   [
+    "Supplier 032",
+    "D",
+    13.9,
+    6.9
+   ],
+   [
+    "Supplier 072",
+    "D",
+    14.3,
+    6.8
+   ],
+   [
+    "Supplier 037",
+    "C",
+    7.9,
+    4.4
+   ],
+   [
+    "Supplier 056",
+    "C",
+    7.3,
+    4.2
+   ],
+   [
+    "Supplier 052",
+    "C",
+    7.5,
+    4.2
+   ]
+  ],
+  "sanity_note": "top suppliers must be tier C/D with elevated order-to-ship"
+ },
+ "H08": {
+  "question": "Show the top supplier-item pairs where late procurement caused stockouts and poor OTIF.",
+  "sql": "WITH pairs AS (SELECT supplier_key, item_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1,2),\n        item_so AS (SELECT item_key, AVG(CASE WHEN is_stockout THEN 100.0 ELSE 0 END) so_pct FROM mro_distributor.inv_balance_snapshot GROUP BY 1),\n        item_otif AS (\n          SELECT sol.item_key,\n                 COUNT(CASE WHEN ff.ship_date_key IS NOT NULL AND ff.ship_date_key <= sol.promised_ship_date_key\n                             AND ff.qty_shipped >= sol.qty_ordered THEN 1 END)*100.0/COUNT(*) otif\n          FROM mro_distributor.o2c_sales_order_line sol LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key) GROUP BY 1)\n        SELECT s.supplier_name, s.reliability_tier, i.sku, ROUND(p.late,1) AS avg_late_days,\n               ROUND(so.so_pct,1) AS stockout_pct, ROUND(ot.otif,1) AS otif_pct\n        FROM pairs p\n        JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        JOIN mro_distributor.dim_item i USING (item_key)\n        JOIN item_so so USING (item_key)\n        JOIN item_otif ot USING (item_key)\n        WHERE p.late > 5 AND ot.otif < 50\n        ORDER BY so.so_pct DESC LIMIT 10",
+  "columns": [
+   "supplier_name",
+   "reliability_tier",
+   "sku",
+   "avg_late_days",
+   "stockout_pct",
+   "otif_pct"
+  ],
+  "result": [
+   [
+    "Supplier 066",
+    "D",
+    "SKU-00768",
+    16.8,
+    16.2,
+    0.0
+   ],
+   [
+    "Supplier 097",
+    "D",
+    "SKU-00247",
+    13.9,
+    15.9,
+    3.4
+   ],
+   [
+    "Supplier 097",
+    "D",
+    "SKU-00649",
+    10.2,
+    15.2,
+    4.3
+   ],
+   [
+    "Supplier 066",
+    "D",
+    "SKU-00721",
+    15.7,
+    15.2,
+    4.5
+   ],
+   [
+    "Supplier 097",
+    "D",
+    "SKU-00411",
+    13.5,
+    14.8,
+    12.8
+   ],
+   [
+    "Supplier 003",
+    "D",
+    "SKU-00246",
+    16.3,
+    14.8,
+    2.4
+   ],
+   [
+    "Supplier 003",
+    "D",
+    "SKU-00983",
+    15.9,
+    14.6,
+    9.9
+   ],
+   [
+    "Supplier 066",
+    "D",
+    "SKU-00657",
+    14.4,
+    14.6,
+    2.0
+   ],
+   [
+    "Supplier 003",
+    "D",
+    "SKU-00918",
+    14.8,
+    14.6,
+    9.4
+   ],
+   [
+    "Supplier 066",
+    "D",
+    "SKU-01151",
+    21.5,
+    14.6,
+    9.4
+   ]
+  ],
+  "sanity_note": "top pairs must be tier C/D sourced"
+ },
+ "H09": {
+  "question": "If we replaced our tier-D suppliers, how much order-to-ship delay would we eliminate on affected SKUs?",
+  "sql": "WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        tier_ots AS (\n          SELECT s.reliability_tier, AVG(ff.order_to_ship_days) ots, COUNT(*) ff_lines\n          FROM mro_distributor.o2c_fulfillment_line ff\n          JOIN item_supplier m USING (item_key)\n          JOIN mro_distributor.dim_supplier s USING (supplier_key)\n          GROUP BY 1)\n        SELECT ROUND(d.ots - a.ots, 2) AS delay_days_eliminated_per_line, d.ff_lines AS affected_shipments\n        FROM (SELECT * FROM tier_ots WHERE reliability_tier='D') d,\n             (SELECT * FROM tier_ots WHERE reliability_tier='A') a",
+  "columns": [
+   "delay_days_eliminated_per_line",
+   "affected_shipments"
+  ],
+  "result": [
+   [
+    4.99,
+    12202.0
+   ]
+  ],
+  "sanity_note": "delta ~5 days (D ots ~7.0 vs A ots ~2.0)"
+ },
+ "H10": {
+  "question": "Which items should we dual-source first, given supplier lateness and their stockout/revenue impact?",
+  "sql": "WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        item_late AS (SELECT item_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1),\n        item_rev AS (SELECT item_key, SUM(ext_amount) revenue FROM mro_distributor.o2c_sales_order_line GROUP BY 1),\n        item_so AS (SELECT item_key, AVG(CASE WHEN is_stockout THEN 1.0 ELSE 0 END) so_rate FROM mro_distributor.inv_balance_snapshot GROUP BY 1)\n        SELECT i.sku, s.supplier_name, s.reliability_tier, ROUND(l.late,1) AS avg_late_days,\n               ROUND(r.revenue,2) AS revenue, ROUND(so.so_rate*100,1) AS stockout_pct\n        FROM item_late l\n        JOIN item_rev r USING (item_key)\n        JOIN item_so so USING (item_key)\n        JOIN item_supplier m USING (item_key)\n        JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        JOIN mro_distributor.dim_item i USING (item_key)\n        ORDER BY l.late * r.revenue * so.so_rate DESC LIMIT 10",
+  "columns": [
+   "sku",
+   "supplier_name",
+   "reliability_tier",
+   "avg_late_days",
+   "revenue",
+   "stockout_pct"
+  ],
+  "result": [
+   [
+    "SKU-00057",
+    "Supplier 066",
+    "D",
+    15.6,
+    10103228.1,
+    13.7
+   ],
+   [
+    "SKU-00093",
+    "Supplier 097",
+    "D",
+    13.9,
+    4829342.5,
+    12.8
+   ],
+   [
+    "SKU-00919",
+    "Supplier 073",
+    "C",
+    7.3,
+    8062443.96,
+    9.3
+   ],
+   [
+    "SKU-00124",
+    "Supplier 097",
+    "D",
+    16.8,
+    2293695.45,
+    13.8
+   ],
+   [
+    "SKU-00638",
+    "Supplier 084",
+    "D",
+    17.3,
+    1910810.79,
+    14.6
+   ],
+   [
+    "SKU-00687",
+    "Supplier 097",
+    "D",
+    17.3,
+    2031733.86,
+    13.3
+   ],
+   [
+    "SKU-00441",
+    "Supplier 040",
+    "D",
+    17.9,
+    1381085.55,
+    12.0
+   ],
+   [
+    "SKU-01108",
+    "Supplier 032",
+    "D",
+    13.0,
+    1198594.0,
+    14.6
+   ],
+   [
+    "SKU-01033",
+    "Supplier 097",
+    "D",
+    14.8,
+    998888.52,
+    14.2
+   ],
+   [
+    "SKU-00546",
+    "Supplier 003",
+    "D",
+    16.7,
+    906935.92,
+    12.8
+   ]
+  ],
+  "sanity_note": "top items must be tier C/D sourced"
+ },
+ "H11": {
+  "question": "Compare fast-moving versus slow-moving items: which group suffers more from supplier lateness?",
+  "sql": "WITH vel AS (SELECT item_key, SUM(qty_shipped) units FROM mro_distributor.o2c_fulfillment_line GROUP BY 1),\n        cut AS (SELECT quantile_cont(units,0.8) hi, quantile_cont(units,0.2) lo FROM vel),\n        cls AS (SELECT v.item_key, CASE WHEN v.units >= cut.hi THEN 'fast' WHEN v.units <= cut.lo THEN 'slow' END grp FROM vel v, cut),\n        item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        grp_late AS (\n          SELECT c.grp, AVG(po.late_days) late\n          FROM mro_distributor.p2p_purchase_order_line po JOIN cls c USING (item_key) WHERE c.grp IS NOT NULL GROUP BY 1),\n        grp_ots AS (\n          SELECT c.grp, AVG(ff.order_to_ship_days) ots\n          FROM mro_distributor.o2c_fulfillment_line ff JOIN cls c USING (item_key) WHERE c.grp IS NOT NULL GROUP BY 1),\n        grp_so AS (\n          SELECT c.grp, AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END) so_pct\n          FROM mro_distributor.inv_balance_snapshot snap JOIN cls c USING (item_key) WHERE c.grp IS NOT NULL GROUP BY 1)\n        SELECT l.grp AS mover_group, ROUND(l.late,2) AS avg_supplier_late_days,\n               ROUND(o.ots,2) AS avg_order_to_ship_days, ROUND(so.so_pct,2) AS stockout_pct\n        FROM grp_late l JOIN grp_ots o USING (grp) JOIN grp_so so USING (grp) ORDER BY 1",
+  "columns": [
+   "mover_group",
+   "avg_supplier_late_days",
+   "avg_order_to_ship_days",
+   "stockout_pct"
+  ],
+  "result": [
+   [
+    "fast",
+    2.37,
+    2.75,
+    4.26
+   ],
+   [
+    "slow",
+    1.64,
+    2.52,
+    3.72
+   ]
+  ],
+  "sanity_note": "expected finding: both groups suffer similarly (lateness is supplier-driven, not velocity-driven)"
+ },
+ "H12": {
+  "question": "Did Q4 revenue seasonality worsen stockouts, and which suppliers failed to keep up with the demand spike?",
+  "sql": "SELECT CASE WHEN d.month_num IN (10,11,12) THEN 'Q4' ELSE 'non-Q4' END AS period,\n               ROUND(AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END),2) AS stockout_pct\n        FROM mro_distributor.inv_balance_snapshot snap JOIN mro_distributor.dim_date d ON snap.snapshot_date_key = d.date_key\n        GROUP BY 1 ORDER BY 1",
+  "columns": [
+   "period",
+   "stockout_pct"
+  ],
+  "result": [
+   [
+    "Q4",
+    4.02
+   ],
+   [
+    "non-Q4",
+    3.92
+   ]
+  ],
+  "sanity_note": "expected finding: stockouts are FLAT Q4 vs non-Q4 (generator does not demand-couple stockouts) \u2014 the correct answer is 'no material worsening'"
+ },
+ "H13": {
+  "question": "Which customers are hit twice: buying items from unreliable suppliers and experiencing our slowest fulfillment?",
+  "sql": "WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM mro_distributor.p2p_purchase_order_line),\n        cust_cd AS (\n          SELECT sol.customer_key,\n                 SUM(CASE WHEN s.reliability_tier IN ('C','D') THEN sol.ext_amount ELSE 0 END)*100.0/SUM(sol.ext_amount) cd_pct,\n                 SUM(sol.ext_amount) revenue\n          FROM mro_distributor.o2c_sales_order_line sol\n          JOIN item_supplier m USING (item_key)\n          JOIN mro_distributor.dim_supplier s USING (supplier_key)\n          GROUP BY 1),\n        cust_ots AS (SELECT customer_key, AVG(order_to_ship_days) ots FROM mro_distributor.o2c_fulfillment_line GROUP BY 1)\n        SELECT c.customer_name, ROUND(cd.cd_pct,1) AS pct_revenue_from_cd_suppliers,\n               ROUND(o.ots,2) AS avg_fulfillment_days, ROUND(cd.revenue,2) AS revenue\n        FROM cust_cd cd\n        JOIN cust_ots o USING (customer_key)\n        JOIN mro_distributor.dim_customer c USING (customer_key)\n        WHERE cd.cd_pct > (SELECT SUM(CASE WHEN s.reliability_tier IN ('C','D') THEN sol.ext_amount ELSE 0 END)*100.0/SUM(sol.ext_amount)\n                           FROM mro_distributor.o2c_sales_order_line sol JOIN item_supplier m USING (item_key) JOIN mro_distributor.dim_supplier s USING (supplier_key))\n          AND o.ots > (SELECT AVG(order_to_ship_days) FROM mro_distributor.o2c_fulfillment_line)\n        ORDER BY cd.revenue DESC LIMIT 10",
+  "columns": [
+   "customer_name",
+   "pct_revenue_from_cd_suppliers",
+   "avg_fulfillment_days",
+   "revenue"
+  ],
+  "result": [
+   [
+    "Customer 192",
+    16.9,
+    2.67,
+    15920114.75
+   ],
+   [
+    "Customer 059",
+    17.3,
+    2.67,
+    8957172.29
+   ],
+   [
+    "Customer 049",
+    15.2,
+    2.66,
+    8648704.17
+   ],
+   [
+    "Customer 106",
+    14.8,
+    2.66,
+    8616970.32
+   ],
+   [
+    "Customer 128",
+    15.7,
+    2.73,
+    8029509.82
+   ],
+   [
+    "Customer 090",
+    15.3,
+    2.73,
+    6962731.32
+   ],
+   [
+    "Customer 129",
+    14.6,
+    2.68,
+    6806241.72
+   ],
+   [
+    "Customer 058",
+    17.7,
+    2.71,
+    6267507.01
+   ],
+   [
+    "Customer 169",
+    17.4,
+    2.72,
+    6206029.51
+   ],
+   [
+    "Customer 145",
+    15.2,
+    2.67,
+    4428249.01
+   ]
+  ],
+  "sanity_note": "listed customers have above-average C/D revenue share AND above-average fulfillment days"
+ },
+ "H14": {
+  "question": "Break down our OTIF misses: what share is late-only, short-only, or both, and which suppliers sit behind the late portion?",
+  "sql": "WITH j AS (\n          SELECT sol.so_line_key, sol.qty_ordered, sol.promised_ship_date_key, ff.ship_date_key, ff.qty_shipped\n          FROM mro_distributor.o2c_sales_order_line sol LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key)),\n        cat AS (\n          SELECT CASE\n            WHEN ship_date_key IS NULL THEN 'never_shipped'\n            WHEN ship_date_key > promised_ship_date_key AND qty_shipped >= qty_ordered THEN 'late_only'\n            WHEN ship_date_key <= promised_ship_date_key AND qty_shipped < qty_ordered THEN 'short_only'\n            WHEN ship_date_key > promised_ship_date_key AND qty_shipped < qty_ordered THEN 'late_and_short'\n            ELSE 'hit' END miss_type\n          FROM j)\n        SELECT miss_type, COUNT(*) AS lines,\n               ROUND(COUNT(*)*100.0/(SELECT COUNT(*) FROM cat WHERE miss_type != 'hit'),1) AS pct_of_misses\n        FROM cat WHERE miss_type != 'hit' GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "miss_type",
+   "lines",
+   "pct_of_misses"
+  ],
+  "result": [
+   [
+    "late_only",
+    32787.0,
+    97.5
+   ],
+   [
+    "never_shipped",
+    845.0,
+    2.5
+   ]
+  ],
+  "sanity_note": "short_only and late_and_short must be 0% (generator ships full quantities) \u2014 honest data reality"
+ },
+ "M01": {
+  "question": "Show revenue by month. Is there seasonality?",
+  "sql": "SELECT d.year_num, d.month_num, ROUND(SUM(sol.ext_amount),2) AS revenue\n        FROM mro_distributor.o2c_sales_order_line sol JOIN mro_distributor.dim_date d ON sol.order_date_key = d.date_key\n        GROUP BY 1,2 ORDER BY 1,2",
+  "columns": [
+   "year_num",
+   "month_num",
+   "revenue"
+  ],
+  "result": [
+   [
+    2024.0,
+    7.0,
+    22641407.27
+   ],
+   [
+    2024.0,
+    8.0,
+    22789922.31
+   ],
+   [
+    2024.0,
+    9.0,
+    21778437.45
+   ],
+   [
+    2024.0,
+    10.0,
+    28884106.75
+   ],
+   [
+    2024.0,
+    11.0,
+    27405672.9
+   ],
+   [
+    2024.0,
+    12.0,
+    29740117.06
+   ],
+   [
+    2025.0,
+    1.0,
+    23201237.86
+   ],
+   [
+    2025.0,
+    2.0,
+    21552268.92
+   ],
+   [
+    2025.0,
+    3.0,
+    22494793.97
+   ],
+   [
+    2025.0,
+    4.0,
+    22738137.18
+   ],
+   [
+    2025.0,
+    5.0,
+    24098350.82
+   ],
+   [
+    2025.0,
+    6.0,
+    23681188.7
+   ],
+   [
+    2025.0,
+    7.0,
+    25320316.55
+   ],
+   [
+    2025.0,
+    8.0,
+    23527311.14
+   ],
+   [
+    2025.0,
+    9.0,
+    23995596.96
+   ],
+   [
+    2025.0,
+    10.0,
+    31407742.7
+   ],
+   [
+    2025.0,
+    11.0,
+    28906047.62
+   ],
+   [
+    2025.0,
+    12.0,
+    23000846.24
+   ]
+  ]
+ },
+ "M02": {
+  "question": "Which item category has the best gross margin, and which has the worst?",
+  "sql": "SELECT i.category, ROUND(SUM(sol.margin_amount)/SUM(sol.ext_amount)*100,2) AS gm_pct\n        FROM mro_distributor.o2c_sales_order_line sol JOIN mro_distributor.dim_item i USING (item_key)\n        GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "category",
+   "gm_pct"
+  ],
+  "result": [
+   [
+    "MRO",
+    43.02
+   ],
+   [
+    "Tools",
+    35.87
+   ],
+   [
+    "Safety",
+    35.87
+   ],
+   [
+    "Electrical",
+    28.54
+   ],
+   [
+    "Fasteners",
+    21.37
+   ]
+  ]
+ },
+ "M03": {
+  "question": "Rank suppliers by average PO late days. Who are the worst five?",
+  "sql": "SELECT s.supplier_name, ROUND(AVG(po.late_days),2) AS avg_late_days\n        FROM mro_distributor.p2p_purchase_order_line po JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        GROUP BY 1 ORDER BY 2 DESC LIMIT 5",
+  "columns": [
+   "supplier_name",
+   "avg_late_days"
+  ],
+  "result": [
+   [
+    "Supplier 003",
+    16.17
+   ],
+   [
+    "Supplier 097",
+    15.24
+   ],
+   [
+    "Supplier 066",
+    15.1
+   ],
+   [
+    "Supplier 084",
+    14.82
+   ],
+   [
+    "Supplier 040",
+    14.51
+   ]
+  ]
+ },
+ "M04": {
+  "question": "What is on-time delivery rate by supplier reliability tier?",
+  "sql": "SELECT s.reliability_tier, ROUND(COUNT(CASE WHEN po.late_days = 0 THEN 1 END)*100.0/COUNT(*),2) AS otd_pct\n        FROM mro_distributor.p2p_purchase_order_line po JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        GROUP BY 1 ORDER BY 1",
+  "columns": [
+   "reliability_tier",
+   "otd_pct"
+  ],
+  "result": [
+   [
+    "A",
+    90.73
+   ],
+   [
+    "B",
+    18.37
+   ],
+   [
+    "C",
+    2.24
+   ],
+   [
+    "D",
+    0.56
+   ]
+  ]
+ },
+ "M05": {
+  "question": "Show revenue by customer segment.",
+  "sql": "SELECT c.segment, ROUND(SUM(sol.ext_amount),2) AS revenue\n        FROM mro_distributor.o2c_sales_order_line sol JOIN mro_distributor.dim_customer c USING (customer_key)\n        GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "segment",
+   "revenue"
+  ],
+  "result": [
+   [
+    "Manufacturing",
+    195949047.19
+   ],
+   [
+    "Facilities",
+    100858313.44
+   ],
+   [
+    "Construction",
+    99933378.09
+   ],
+   [
+    "Government",
+    50422763.68
+   ]
+  ]
+ },
+ "M06": {
+  "question": "Which warehouse holds the most inventory value?",
+  "sql": "SELECT w.warehouse_name, ROUND(SUM(snap.value_on_hand),2) AS inv_value\n        FROM mro_distributor.inv_balance_snapshot snap JOIN mro_distributor.dim_warehouse w USING (warehouse_key)\n        WHERE snap.snapshot_date_key = (SELECT MAX(snapshot_date_key) FROM mro_distributor.inv_balance_snapshot)\n        GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "warehouse_name",
+   "inv_value"
+  ],
+  "result": [
+   [
+    "Atlanta Branch",
+    9874490.5
+   ],
+   [
+    "Chicago DC",
+    8834024.55
+   ],
+   [
+    "Reno Branch",
+    8406610.03
+   ],
+   [
+    "Dallas DC",
+    8050984.12
+   ]
+  ]
+ },
+ "M07": {
+  "question": "What share of invoices is overdue by customer segment?",
+  "sql": "SELECT c.segment, ROUND(COUNT(CASE WHEN pa.payment_date_key > i.due_date_key THEN 1 END)*100.0/COUNT(*),2) AS overdue_pct\n        FROM mro_distributor.ar_invoice i\n        JOIN mro_distributor.ar_payment_application pa USING (invoice_key)\n        JOIN mro_distributor.dim_customer c ON i.customer_key = c.customer_key\n        GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "segment",
+   "overdue_pct"
+  ],
+  "result": [
+   [
+    "Manufacturing",
+    75.16
+   ],
+   [
+    "Construction",
+    73.35
+   ],
+   [
+    "Facilities",
+    71.71
+   ],
+   [
+    "Government",
+    69.43
+   ]
+  ]
+ },
+ "M08": {
+  "question": "Who are our top 10 suppliers by spend?",
+  "sql": "SELECT s.supplier_name, ROUND(SUM(po.ext_cost),2) AS spend\n        FROM mro_distributor.p2p_purchase_order_line po JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+  "columns": [
+   "supplier_name",
+   "spend"
+  ],
+  "result": [
+   [
+    "Supplier 021",
+    69129229.98
+   ],
+   [
+    "Supplier 093",
+    22010450.43
+   ],
+   [
+    "Supplier 074",
+    12374405.06
+   ],
+   [
+    "Supplier 018",
+    8747178.56
+   ],
+   [
+    "Supplier 014",
+    8298540.86
+   ],
+   [
+    "Supplier 010",
+    8046581.4
+   ],
+   [
+    "Supplier 066",
+    7856161.88
+   ],
+   [
+    "Supplier 097",
+    6360459.69
+   ],
+   [
+    "Supplier 063",
+    6332372.31
+   ],
+   [
+    "Supplier 019",
+    6277666.01
+   ]
+  ]
+ },
+ "M09": {
+  "question": "How has monthly COGS trended over the last 12 months?",
+  "sql": "SELECT d.year_num, d.month_num, ROUND(SUM(b.period_balance),2) AS gl_cogs\n        FROM mro_distributor.gl_account_balance b\n        JOIN mro_distributor.dim_gl_account a USING (gl_account_key)\n        JOIN mro_distributor.dim_date d ON b.period_date_key = d.date_key\n        WHERE a.account_name = 'COGS' AND d.year_num = 2025\n        GROUP BY 1,2 ORDER BY 1,2",
+  "columns": [
+   "year_num",
+   "month_num",
+   "gl_cogs"
+  ],
+  "result": [
+   [
+    2025.0,
+    1.0,
+    14847524.98
+   ],
+   [
+    2025.0,
+    2.0,
+    13625012.36
+   ],
+   [
+    2025.0,
+    3.0,
+    14720161.94
+   ],
+   [
+    2025.0,
+    4.0,
+    13871947.69
+   ],
+   [
+    2025.0,
+    5.0,
+    15652090.86
+   ],
+   [
+    2025.0,
+    6.0,
+    14858473.78
+   ],
+   [
+    2025.0,
+    7.0,
+    15715540.37
+   ],
+   [
+    2025.0,
+    8.0,
+    15608102.71
+   ],
+   [
+    2025.0,
+    9.0,
+    14973530.69
+   ],
+   [
+    2025.0,
+    10.0,
+    18944746.36
+   ],
+   [
+    2025.0,
+    11.0,
+    19096459.34
+   ],
+   [
+    2025.0,
+    12.0,
+    14131356.45
+   ]
+  ]
+ },
+ "M10": {
+  "question": "Which items are slow movers, and what is their tied-up inventory value?",
+  "sql": "WITH velocity AS (SELECT item_key, SUM(qty_shipped) units FROM mro_distributor.o2c_fulfillment_line GROUP BY 1),\n        cutoff AS (SELECT quantile_cont(units, 0.2) q FROM velocity)\n        SELECT COUNT(DISTINCT snap.item_key) AS slow_mover_items, ROUND(SUM(snap.value_on_hand),2) AS tied_up_value\n        FROM mro_distributor.inv_balance_snapshot snap JOIN velocity v USING (item_key), cutoff\n        WHERE snap.snapshot_date_key = (SELECT MAX(snapshot_date_key) FROM mro_distributor.inv_balance_snapshot)\n          AND v.units <= cutoff.q",
+  "columns": [
+   "slow_mover_items",
+   "tied_up_value"
+  ],
+  "result": [
+   [
+    240.0,
+    5683956.39
+   ]
+  ]
+ },
+ "M11": {
+  "question": "What is average days-to-pay versus credit terms by customer segment?",
+  "sql": "SELECT c.segment, ROUND(AVG(pa.days_to_pay - c.credit_days),2) AS days_beyond_terms\n        FROM mro_distributor.ar_payment_application pa JOIN mro_distributor.dim_customer c USING (customer_key)\n        GROUP BY 1 ORDER BY 2 DESC",
+  "columns": [
+   "segment",
+   "days_beyond_terms"
+  ],
+  "result": [
+   [
+    "Manufacturing",
+    6.93
+   ],
+   [
+    "Construction",
+    6.04
+   ],
+   [
+    "Facilities",
+    5.08
+   ],
+   [
+    "Government",
+    3.97
+   ]
+  ]
+ },
+ "M12": {
+  "question": "What is our OTIF rate by warehouse?",
+  "sql": "SELECT w.warehouse_name,\n               ROUND(COUNT(CASE WHEN ff.ship_date_key IS NOT NULL AND ff.ship_date_key <= sol.promised_ship_date_key\n                                 AND ff.qty_shipped >= sol.qty_ordered THEN 1 END)*100.0/COUNT(*),2) AS otif_pct\n        FROM mro_distributor.o2c_sales_order_line sol\n        LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key)\n        JOIN mro_distributor.dim_warehouse w ON sol.warehouse_key = w.warehouse_key\n        GROUP BY 1 ORDER BY 2",
+  "columns": [
+   "warehouse_name",
+   "otif_pct"
+  ],
+  "result": [
+   [
+    "Reno Branch",
+    77.79
+   ],
+   [
+    "Chicago DC",
+    78.19
+   ],
+   [
+    "Dallas DC",
+    78.2
+   ],
+   [
+    "Atlanta Branch",
+    78.27
+   ]
+  ]
+ },
+ "S01": {
+  "question": "What is our total revenue?",
+  "sql": "SELECT ROUND(SUM(ext_amount),2) FROM mro_distributor.o2c_sales_order_line",
+  "columns": [
+   "round(sum(ext_amount), 2)"
+  ],
+  "result": [
+   [
+    447163502.4
+   ]
+  ]
+ },
+ "S02": {
+  "question": "What is our current DSO?",
+  "sql": "SELECT ROUND(SUM(days_to_pay*amount_applied)/SUM(amount_applied),2) FROM mro_distributor.ar_payment_application",
+  "columns": [
+   "round((sum((days_to_pay * amount_applied)) / sum(amount_applied)), 2)"
+  ],
+  "result": [
+   [
+    44.02
+   ]
+  ]
+ },
+ "S03": {
+  "question": "What is our current DPO?",
+  "sql": "SELECT ROUND(SUM(days_to_pay*amount_paid)/SUM(amount_paid),2) FROM mro_distributor.p2p_bill_payment",
+  "columns": [
+   "round((sum((days_to_pay * amount_paid)) / sum(amount_paid)), 2)"
+  ],
+  "result": [
+   [
+    39.24
+   ]
+  ]
+ },
+ "S04": {
+  "question": "What is our current DIO?",
+  "sql": "SELECT ROUND(\n          (SELECT AVG(dv) FROM (SELECT snapshot_date_key, SUM(value_on_hand) dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1))\n          / (SELECT SUM(ext_cost)/COUNT(DISTINCT order_date_key) FROM mro_distributor.o2c_sales_order_line), 2)",
+  "columns": [
+   "round(((SELECT avg(dv) FROM (SELECT snapshot_date_key, sum(value_on_hand) AS dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1)) / (SELECT (sum(ext_cost) / count(DISTINCT order_date_key)) FROM mro_distributor.o2c_sales_order_line)), 2)"
+  ],
+  "result": [
+   [
+    83.45
+   ]
+  ]
+ },
+ "S05": {
+  "question": "What is our cash conversion cycle?",
+  "sql": "SELECT ROUND(dso.v + dio.v - dpo.v, 2) FROM\n          (SELECT SUM(days_to_pay*amount_applied)/SUM(amount_applied) v FROM mro_distributor.ar_payment_application) dso,\n          (SELECT (SELECT AVG(dv) FROM (SELECT snapshot_date_key, SUM(value_on_hand) dv FROM mro_distributor.inv_balance_snapshot GROUP BY 1))\n                  / (SELECT SUM(ext_cost)/COUNT(DISTINCT order_date_key) FROM mro_distributor.o2c_sales_order_line) v) dio,\n          (SELECT SUM(days_to_pay*amount_paid)/SUM(amount_paid) v FROM mro_distributor.p2p_bill_payment) dpo",
+  "columns": [
+   "round(((dso.v + dio.v) - dpo.v), 2)"
+  ],
+  "result": [
+   [
+    88.23
+   ]
+  ]
+ },
+ "S06": {
+  "question": "What is our overall gross margin percentage?",
+  "sql": "SELECT ROUND(SUM(margin_amount)/SUM(ext_amount)*100,2) FROM mro_distributor.o2c_sales_order_line",
+  "columns": [
+   "round(((sum(margin_amount) / sum(ext_amount)) * 100), 2)"
+  ],
+  "result": [
+   [
+    36.65
+   ]
+  ]
+ },
+ "S07": {
+  "question": "What is our current stockout rate?",
+  "sql": "SELECT ROUND(AVG(CASE WHEN is_stockout THEN 100.0 ELSE 0 END),2) FROM mro_distributor.inv_balance_snapshot",
+  "columns": [
+   "round(avg(CASE  WHEN (is_stockout) THEN (100.0) ELSE 0 END), 2)"
+  ],
+  "result": [
+   [
+    3.96
+   ]
+  ]
+ },
+ "S08": {
+  "question": "What is the total value of inventory on hand?",
+  "sql": "SELECT ROUND(SUM(value_on_hand),2) FROM mro_distributor.inv_balance_snapshot\n        WHERE snapshot_date_key = (SELECT MAX(snapshot_date_key) FROM mro_distributor.inv_balance_snapshot)",
+  "columns": [
+   "round(sum(value_on_hand), 2)"
+  ],
+  "result": [
+   [
+    35166109.2
+   ]
+  ]
+ },
+ "S09": {
+  "question": "What is our average order value?",
+  "sql": "SELECT ROUND(AVG(order_total),2) FROM (\n          SELECT so_number, SUM(ext_amount) AS order_total FROM mro_distributor.o2c_sales_order_line GROUP BY so_number)",
+  "columns": [
+   "round(avg(order_total), 2)"
+  ],
+  "result": [
+   [
+    2909.86
+   ]
+  ]
+ },
+ "S10": {
+  "question": "What is our return rate?",
+  "sql": "SELECT ROUND((SELECT COUNT(*) FROM mro_distributor.o2c_return_line) * 100.0\n                     / (SELECT COUNT(*) FROM mro_distributor.o2c_sales_order_line), 2)",
+  "columns": [
+   "round((((SELECT count_star() FROM mro_distributor.o2c_return_line) * 100.0) / (SELECT count_star() FROM mro_distributor.o2c_sales_order_line)), 2)"
+  ],
+  "result": [
+   [
+    3.06
+   ]
+  ]
+ }
+}
