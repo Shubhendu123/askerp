@@ -1741,3 +1741,49 @@ metrics:
       - "How does supplier lateness affect our cash?"
       - "Show the supplier-to-cash impact by reliability tier"
       - "Are unreliable suppliers slowing our collections?"
+
+  - name: otif_pct
+    tenant: mro
+    domain: Order to Cash
+    sentiment: positive
+    grain: Per sales order line; share delivered on time and in full, full history.
+    tables:
+      - mro_distributor.o2c_sales_order_line
+      - mro_distributor.o2c_fulfillment_line
+    description: |
+      OTIF — the percentage of order lines shipped On Time (on or before the
+      customer-promised ship date) AND In Full (quantity shipped covers quantity
+      ordered). This is distribution's canonical perfect-order service metric,
+      running around 78% overall. OTIF misses concentrate in items sourced from
+      unreliable suppliers: tier-A-sourced items achieve ~91% OTIF while
+      tier-D-sourced items collapse to single digits, because late inbound POs
+      create stockouts that push shipments past the promise date. Lines never
+      shipped count as misses.
+    formula: |
+      SELECT
+        COUNT(CASE WHEN ff.ship_date_key IS NOT NULL
+                    AND ff.ship_date_key <= sol.promised_ship_date_key
+                    AND ff.qty_shipped >= sol.qty_ordered THEN 1 END) * 100.0
+        / COUNT(*)
+      FROM mro_distributor.o2c_sales_order_line sol
+      LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key)
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_customer.segment
+      - dim_supplier.reliability_tier
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - otif
+      - on time in full
+      - perfect order rate
+      - service level
+      - delivery performance to promise
+      - fill rate on time
+    definition_owner: Operations
+    format: percentage
+    example_questions:
+      - "What is our OTIF rate?"
+      - "Which warehouse has the worst OTIF?"
+      - "How does supplier reliability affect our OTIF?"

@@ -194,7 +194,15 @@ for di,d in enumerate(dates):
                              rq,round(price*rq,2),rng.choice(["Damaged","Wrong Item","Overordered","Quality"])))
 so_df=pd.DataFrame(so_rows,columns=["so_line_key","so_number","order_date_key","customer_key",
   "item_key","warehouse_key","employee_key","subsidiary_key","qty_ordered","unit_price",
-  "ext_amount","unit_cost","ext_cost","margin_amount"]); load("o2c_sales_order_line",so_df)
+  "ext_amount","unit_cost","ext_cost","margin_amount"])
+# OTIF promise (D-034): dedicated seeded stream, drawn in so_line_key order, so the
+# main RNG stream (and every other table) is byte-identical to pre-OTIF generations.
+rng_promise=np.random.default_rng(SEED); LT_OFF={"Short":2,"Medium":3,"Long":4}
+p_off=so_df.item_key.map(items.set_index("item_key").lead_time_class.map(LT_OFF)).to_numpy()
+p_noise=rng_promise.integers(0,2,len(so_df))
+so_df["promised_ship_date_key"]=[dk(date(k//10000,(k//100)%100,k%100)+timedelta(days=int(o+n)))
+  for k,o,n in zip(so_df.order_date_key,p_off,p_noise)]
+load("o2c_sales_order_line",so_df)
 ff_df=pd.DataFrame(ff_rows,columns=["ff_line_key","so_line_key","ship_date_key","customer_key",
   "item_key","warehouse_key","subsidiary_key","qty_shipped","order_to_ship_days"]); load("o2c_fulfillment_line",ff_df)
 load("o2c_return_line",pd.DataFrame(ret_rows,columns=["return_line_key","return_date_key",

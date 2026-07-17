@@ -104,7 +104,8 @@ CREATE TABLE mro_distributor.o2c_sales_order_line (
   ext_amount      DECIMAL(14,2),
   unit_cost       DECIMAL(12,2),
   ext_cost        DECIMAL(14,2),
-  margin_amount   DECIMAL(14,2)
+  margin_amount   DECIMAL(14,2),
+  promised_ship_date_key INTEGER REFERENCES mro_distributor.dim_date(date_key)  -- customer promise: order date + lead-time-class offset + 0-1d noise (OTIF, D-034)
 );
 
 CREATE TABLE mro_distributor.o2c_fulfillment_line (

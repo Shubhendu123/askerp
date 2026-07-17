@@ -814,6 +814,12 @@ tables:
   - name: margin_amount
     type: DECIMAL
     description: Gross margin dollars on the line (ext_amount − ext_cost).
+  - name: promised_ship_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Customer-promised ship date (order date + lead-time-class offset,
+      YYYYMMDD key). The OTIF baseline — a line is on time when shipped on or
+      before this date.
 - name: o2c_fulfillment_line
   tenant: mro
   schema: mro_distributor
