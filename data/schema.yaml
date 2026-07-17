@@ -1,5 +1,6 @@
 tables:
 - name: dim_customer
+  tenant: northwind
   type: dimension
   description: Customers of Northwind Furniture — companies that purchase office and
     industrial furniture in bulk.
@@ -73,6 +74,7 @@ tables:
     - Inactive
     - Churned
 - name: dim_item
+  tenant: northwind
   type: dimension
   description: Product catalog of furniture items sold by Northwind Furniture.
   columns:
@@ -131,6 +133,7 @@ tables:
     - Active
     - Discontinued
 - name: dim_employee
+  tenant: northwind
   type: dimension
   description: Northwind Furniture sales team members, including reps, managers, and
     VPs.
@@ -176,6 +179,7 @@ tables:
     - Active
     - Inactive
 - name: dim_location
+  tenant: northwind
   type: dimension
   description: Physical locations operated by Northwind Furniture, including warehouses,
     showrooms, and HQ.
@@ -214,6 +218,7 @@ tables:
     description: Maximum number of furniture units this location can store at one
       time.
 - name: dim_date
+  tenant: northwind
   type: dimension
   description: Calendar date dimension covering all dates relevant to Northwind's
     transaction history.
@@ -250,6 +255,7 @@ tables:
     type: BOOLEAN
     description: True if the date is a US federal holiday.
 - name: fact_sales_order
+  tenant: northwind
   type: fact
   description: One row per sales order placed by a customer. The primary transactional
     record for revenue tracking.
@@ -304,6 +310,7 @@ tables:
     description: Gross margin percentage at the time of the order ((price - cost)
       / price × 100), reflecting period-specific cost fluctuations.
 - name: fact_invoice
+  tenant: northwind
   type: fact
   description: One row per invoice issued to a customer. Invoices are generated from
     confirmed sales orders.
@@ -345,6 +352,7 @@ tables:
     - Overdue
     - Voided
 - name: fact_payment
+  tenant: northwind
   type: fact
   description: One row per payment received from a customer against an invoice.
   columns:
@@ -376,6 +384,7 @@ tables:
     - Check
     - Credit Card
 - name: fact_gl_entry
+  tenant: northwind
   type: fact
   description: General ledger journal entries recording the financial impact of all
     transactions. The accounting source of truth.
@@ -423,3 +432,869 @@ tables:
     type: INTEGER
     description: The ID of the originating record — references invoice_id or payment_id
       depending on source_type.
+# ── MRO Distributor (Tenant 2) — schema mro_distributor, 20 tables (D-029..D-031) ──
+- name: dim_date
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per calendar date, 2024-07-01 through the end of loaded history (18 months).
+  description: Calendar date dimension for the MRO Distributor tenant. Conformed
+    date spine joined by every fact table via date keys in YYYYMMDD form. Query
+    as mro_distributor.dim_date.
+  columns:
+  - name: date_key
+    type: INTEGER
+    primary_key: true
+    description: Date key in YYYYMMDD format (e.g., 20250315 for March 15, 2025).
+  - name: full_date
+    type: DATE
+    description: The actual calendar date.
+  - name: day_of_week
+    type: VARCHAR
+    description: Full name of the day (e.g., Monday, Tuesday).
+  - name: day_of_month
+    type: INTEGER
+    description: Numeric day within the month, from 1 to 31.
+  - name: week_of_year
+    type: INTEGER
+    description: ISO week number within the year.
+  - name: month_num
+    type: INTEGER
+    description: Numeric month of the year, from 1 (January) to 12 (December).
+  - name: month_name
+    type: VARCHAR
+    description: Full name of the month (e.g., January, February).
+  - name: quarter_num
+    type: INTEGER
+    description: 'Calendar quarter: 1, 2, 3, or 4.'
+  - name: fiscal_period
+    type: VARCHAR
+    description: Fiscal period label in FYyy-Qn form (e.g., FY25-Q3). Fiscal year
+      equals calendar year.
+  - name: year_num
+    type: INTEGER
+    description: Four-digit calendar year (e.g., 2025).
+  - name: is_month_end
+    type: BOOLEAN
+    description: True if this date is the last day of its month.
+- name: dim_subsidiary
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per legal entity (3 subsidiaries).
+  description: Legal entities of the MRO distributor group — two US subsidiaries
+    and one Canadian, rolling up to MRO Holdings. Every fact row carries a
+    subsidiary key, mirroring NetSuite's subsidiary-on-every-transaction pattern.
+    Query as mro_distributor.dim_subsidiary.
+  columns:
+  - name: subsidiary_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each subsidiary.
+  - name: subsidiary_name
+    type: VARCHAR
+    description: Legal entity name (e.g., MRO Distribution US).
+  - name: country
+    type: VARCHAR
+    description: Country of incorporation, USA or Canada.
+    values:
+    - USA
+    - Canada
+  - name: currency
+    type: VARCHAR
+    description: Functional currency. Single-currency deployment — always USD.
+  - name: parent_rollup
+    type: VARCHAR
+    description: Consolidation parent all subsidiaries roll up to (MRO Holdings).
+- name: dim_item
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per SKU (~1,200 active SKUs).
+  description: Product catalog of the MRO distributor — fasteners, tools, safety,
+    electrical, and MRO consumables sold to industrial customers. Categories carry
+    deliberately different cost and margin profiles (Fasteners thinnest margin,
+    MRO consumables richest). Query as mro_distributor.dim_item.
+  columns:
+  - name: item_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each SKU.
+  - name: sku
+    type: VARCHAR
+    description: Stock-keeping unit code (e.g., SKU-00042).
+  - name: item_name
+    type: VARCHAR
+    description: Product display name.
+  - name: category
+    type: VARCHAR
+    description: 'Top-level product category. Margin bands differ by category:
+      Fasteners ~22% gross margin, Electrical ~28%, Safety ~35%, Tools ~36%,
+      MRO ~43%.'
+    values:
+    - Fasteners
+    - Tools
+    - Safety
+    - Electrical
+    - MRO
+  - name: subcategory
+    type: VARCHAR
+    description: More specific grouping within a category (e.g., Bolts, Power
+      Tools, PPE, Wire, Lubricants).
+  - name: unit_cost
+    type: DECIMAL
+    description: Standard acquisition cost per unit in USD.
+  - name: list_price
+    type: DECIMAL
+    description: Standard selling price per unit in USD.
+  - name: lead_time_class
+    type: VARCHAR
+    description: 'Replenishment lead-time bucket: Short, Medium, or Long.'
+    values:
+    - Short
+    - Medium
+    - Long
+  - name: is_active
+    type: BOOLEAN
+    description: Whether the SKU is currently stocked and sold.
+- name: dim_customer
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per customer account (200 B2B customers).
+  description: B2B customers of the MRO distributor — manufacturers, construction
+    firms, facilities managers, and government buyers. Revenue is deliberately
+    concentrated (top 20% of customers ≈ 63% of revenue). Payment behavior varies
+    by account — a minority of chronic slow payers drives receivables risk.
+    Query as mro_distributor.dim_customer.
+  columns:
+  - name: customer_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each customer account.
+  - name: customer_name
+    type: VARCHAR
+    description: Customer organization name.
+  - name: segment
+    type: VARCHAR
+    description: 'Vertical market segment: Manufacturing, Construction, Facilities,
+      or Government.'
+    values:
+    - Manufacturing
+    - Construction
+    - Facilities
+    - Government
+  - name: region
+    type: VARCHAR
+    description: North American sales region the customer belongs to.
+    values:
+    - Midwest
+    - South
+    - Southeast
+    - West
+    - Northeast
+  - name: credit_terms
+    type: VARCHAR
+    description: 'Agreed payment window for invoices: Net 30, Net 45, or Net 60.'
+    values:
+    - Net 30
+    - Net 45
+    - Net 60
+  - name: credit_days
+    type: INTEGER
+    description: Numeric form of credit_terms (30, 45, or 60 days) for date math
+      against payment dates.
+- name: dim_supplier
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per supplier (100 suppliers).
+  description: Suppliers the distributor buys from. Spend is Pareto-concentrated
+    (top 20% of suppliers ≈ 75% of spend). reliability_tier is the planted causal
+    signal — tier A suppliers deliver on time while tier D suppliers run chronically
+    late, driving stockouts, slower fulfillment, and ultimately slower cash
+    collection. Questions about supplier performance, delivery problems, or supply
+    risk resolve through this table. Query as mro_distributor.dim_supplier.
+  columns:
+  - name: supplier_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each supplier.
+  - name: supplier_name
+    type: VARCHAR
+    description: Supplier organization name.
+  - name: region
+    type: VARCHAR
+    description: Supplier region, including offshore import lanes (Import-APAC,
+      Import-EU).
+  - name: payment_terms
+    type: VARCHAR
+    description: 'Payment terms the distributor owes the supplier: Net 30, Net 45,
+      or Net 60.'
+    values:
+    - Net 30
+    - Net 45
+    - Net 60
+  - name: payment_days
+    type: INTEGER
+    description: Numeric form of payment_terms (30, 45, or 60 days).
+  - name: promised_lead_days
+    type: INTEGER
+    description: Contractual delivery lead time in days from PO placement (7, 14,
+      21, or 30).
+  - name: reliability_tier
+    type: VARCHAR
+    description: 'Delivery reliability grade, A (reliable) through D (chronically
+      late). Mean lateness by tier: A ≈ 0.5 days, B ≈ 2.5, C ≈ 8, D ≈ 16. The
+      primary driver of stockouts and fulfillment delay.'
+    values:
+    - A
+    - B
+    - C
+    - D
+- name: dim_warehouse
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per stocking location (4 warehouses).
+  description: Distribution centers and branches that stock inventory and fulfill
+    orders — two large DCs (Chicago, Dallas) and two branches (Atlanta, Reno).
+    Query as mro_distributor.dim_warehouse.
+  columns:
+  - name: warehouse_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each warehouse.
+  - name: warehouse_name
+    type: VARCHAR
+    description: Facility name (e.g., Chicago DC).
+  - name: region
+    type: VARCHAR
+    description: Region the facility serves.
+    values:
+    - Midwest
+    - South
+    - Southeast
+    - West
+  - name: warehouse_type
+    type: VARCHAR
+    description: 'Facility class: DC (large distribution center) or Branch
+      (smaller stocking branch).'
+    values:
+    - DC
+    - Branch
+- name: dim_gl_account
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per general ledger account (8-account chart).
+  description: Chart of accounts for the MRO tenant — Revenue, COGS, AR, AP,
+    Inventory, Operating Expense, Cash, and Retained Earnings. Journal lines and
+    period balances reference these accounts. Query as
+    mro_distributor.dim_gl_account.
+  columns:
+  - name: gl_account_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each GL account.
+  - name: account_code
+    type: VARCHAR
+    description: Numeric account code (e.g., 4000 for Revenue, 5000 for COGS).
+  - name: account_name
+    type: VARCHAR
+    description: Account name (Revenue, COGS, Accounts Receivable, Accounts
+      Payable, Inventory, Operating Expense, Cash, Retained Earnings).
+  - name: account_type
+    type: VARCHAR
+    description: 'Accounting classification: Asset, Liability, Equity, Revenue,
+      or Expense.'
+    values:
+    - Asset
+    - Liability
+    - Equity
+    - Revenue
+    - Expense
+  - name: statement
+    type: VARCHAR
+    description: Which financial statement the account reports on — P&L or BS
+      (balance sheet).
+    values:
+    - P&L
+    - BS
+  - name: rollup
+    type: VARCHAR
+    description: Statement rollup grouping (e.g., Income, Current Assets, Current
+      Liab, Equity).
+- name: dim_employee
+  tenant: mro
+  schema: mro_distributor
+  type: dimension
+  grain: One row per employee (30 employees).
+  description: Sales reps who own customer orders and buyers who place purchase
+    orders with suppliers. Query as mro_distributor.dim_employee.
+  columns:
+  - name: employee_key
+    type: INTEGER
+    primary_key: true
+    description: Unique identifier for each employee.
+  - name: employee_name
+    type: VARCHAR
+    description: Full name of the employee.
+  - name: role
+    type: VARCHAR
+    description: 'Job function: Sales Rep (owns customer orders) or Buyer (owns
+      purchase orders).'
+    values:
+    - Sales Rep
+    - Buyer
+  - name: region
+    type: VARCHAR
+    description: Region the employee covers.
+- name: o2c_sales_order_line
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per sales order line. Each order in this dataset has exactly one
+    line, so line-level and order-level aggregates coincide.
+  description: Order-to-Cash sales order lines — the revenue backbone of the MRO
+    tenant. Carries both the selling side (unit_price, ext_amount) and the cost
+    side (unit_cost, ext_cost, margin_amount) so revenue, COGS, and gross margin
+    all compute from this one table. Roughly $298M annualized revenue with ~8%
+    YoY growth and a Q4 seasonal uplift. Query as
+    mro_distributor.o2c_sales_order_line.
+  columns:
+  - name: so_line_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each sales order line.
+  - name: so_number
+    type: VARCHAR
+    description: Human-readable sales order number (e.g., SO-000123).
+  - name: order_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the order was placed (YYYYMMDD key into dim_date).
+  - name: customer_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_customer.customer_key
+    description: The customer who placed the order.
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU ordered.
+  - name: warehouse_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_warehouse.warehouse_key
+    description: Warehouse assigned to fulfill the line.
+  - name: employee_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_employee.employee_key
+    description: Sales rep credited with the order.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity the order books to.
+  - name: qty_ordered
+    type: INTEGER
+    description: Units ordered on this line.
+  - name: unit_price
+    type: DECIMAL
+    description: Selling price per unit in USD.
+  - name: ext_amount
+    type: DECIMAL
+    description: Extended selling amount (unit_price × qty_ordered) — the revenue
+      value of the line.
+  - name: unit_cost
+    type: DECIMAL
+    description: Cost per unit at time of order in USD.
+  - name: ext_cost
+    type: DECIMAL
+    description: Extended cost (unit_cost × qty_ordered) — the COGS value of the
+      line.
+  - name: margin_amount
+    type: DECIMAL
+    description: Gross margin dollars on the line (ext_amount − ext_cost).
+- name: o2c_fulfillment_line
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per shipped order line (orders still unshipped at end of history
+    have no row).
+  description: Order-to-Cash fulfillments — when each order line actually shipped.
+    order_to_ship_days is the fulfillment speed measure and a key link in the
+    supplier→cash causal chain — items sourced from unreliable (tier C/D) suppliers
+    stock out more and ship days later. Invoices are issued at ship date, so slow
+    fulfillment directly delays billing and cash. Query as
+    mro_distributor.o2c_fulfillment_line.
+  columns:
+  - name: ff_line_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each fulfillment line.
+  - name: so_line_key
+    type: BIGINT
+    foreign_key: mro_distributor.o2c_sales_order_line.so_line_key
+    description: The sales order line this fulfillment ships.
+  - name: ship_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the line shipped (YYYYMMDD key into dim_date).
+  - name: customer_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_customer.customer_key
+    description: Customer receiving the shipment.
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU shipped.
+  - name: warehouse_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_warehouse.warehouse_key
+    description: Warehouse that shipped the line.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity of the transaction.
+  - name: qty_shipped
+    type: INTEGER
+    description: Units shipped.
+  - name: order_to_ship_days
+    type: INTEGER
+    description: Days between order date and ship date — the fulfillment lead
+      time. Averages ~2 days for items from reliable suppliers, ~7 days for items
+      from tier-D suppliers.
+- name: o2c_return_line
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per customer return line (~3% of order lines are returned).
+  description: Customer returns with credited value and a coded reason (Damaged,
+    Wrong Item, Overordered, Quality). Questions about returns, credits, or
+    product quality complaints resolve here. Query as
+    mro_distributor.o2c_return_line.
+  columns:
+  - name: return_line_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each return line.
+  - name: return_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the return was received (YYYYMMDD key into dim_date).
+  - name: customer_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_customer.customer_key
+    description: Customer making the return.
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU returned.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity of the transaction.
+  - name: qty_returned
+    type: INTEGER
+    description: Units returned.
+  - name: credit_amount
+    type: DECIMAL
+    description: Credit issued to the customer in USD.
+  - name: reason
+    type: VARCHAR
+    description: Coded reason for the return.
+    values:
+    - Damaged
+    - Wrong Item
+    - Overordered
+    - Quality
+- name: ar_invoice
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per customer invoice, issued at ship date (one invoice per
+    fulfillment line).
+  description: Accounts Receivable invoices — the billing record and the source
+    of DSO. Invoices are cut at ship date, so fulfillment delay pushes billing
+    later. open_balance is nonzero for invoices still unpaid at the end of loaded
+    history. Query as mro_distributor.ar_invoice.
+  columns:
+  - name: invoice_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each invoice.
+  - name: invoice_number
+    type: VARCHAR
+    description: Human-readable invoice number (e.g., INV-000123).
+  - name: invoice_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the invoice was issued — equals the ship date (YYYYMMDD key).
+  - name: due_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Payment due date per the customer's credit terms (YYYYMMDD key).
+  - name: customer_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_customer.customer_key
+    description: Customer billed.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity issuing the invoice.
+  - name: invoice_amount
+    type: DECIMAL
+    description: Invoice total in USD.
+  - name: open_balance
+    type: DECIMAL
+    description: Unpaid amount remaining in USD. Zero for fully paid invoices;
+      equals invoice_amount for invoices not yet paid at end of history.
+- name: ar_payment_application
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per payment applied to an invoice (invoices unpaid at end of
+    history have no payment row).
+  description: Customer payments applied against invoices. days_to_pay measures
+    invoice-to-cash speed per payment and is the basis for DSO (~44 days weighted).
+    About 15% of customers are chronic slow payers averaging ~20 days past terms —
+    the second, customer-driven cash-delay signal alongside the supplier-driven
+    one. Query as mro_distributor.ar_payment_application.
+  columns:
+  - name: ar_payment_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each payment application.
+  - name: invoice_key
+    type: BIGINT
+    foreign_key: mro_distributor.ar_invoice.invoice_key
+    description: The invoice this payment settles.
+  - name: payment_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date payment was received (YYYYMMDD key into dim_date).
+  - name: customer_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_customer.customer_key
+    description: Paying customer.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity receiving payment.
+  - name: amount_applied
+    type: DECIMAL
+    description: Amount applied to the invoice in USD.
+  - name: days_to_pay
+    type: INTEGER
+    description: Days from invoice date to payment date — the per-invoice
+      collection time.
+- name: p2p_purchase_order_line
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per purchase order line placed with a supplier.
+  description: Procure-to-Pay purchase order lines — what the distributor bought,
+    from whom, and how late it arrived. late_days (received minus promised date)
+    is the planted supplier-reliability signal, rising from ~0 days for tier-A
+    suppliers to ~15 days for tier-D. Supplier spend and delivery performance
+    questions start here. Query as mro_distributor.p2p_purchase_order_line.
+  columns:
+  - name: po_line_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each PO line.
+  - name: po_number
+    type: VARCHAR
+    description: Human-readable purchase order number (e.g., PO-000123).
+  - name: po_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the PO was placed (YYYYMMDD key into dim_date).
+  - name: promised_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Contractual delivery date (PO date + supplier promised lead time).
+  - name: received_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date goods were actually received.
+  - name: supplier_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_supplier.supplier_key
+    description: Supplier the PO was placed with.
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU purchased. Each SKU has a single assigned supplier, so
+      distinct (item_key, supplier_key) pairs map items to their source supplier.
+  - name: warehouse_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_warehouse.warehouse_key
+    description: Receiving warehouse.
+  - name: employee_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_employee.employee_key
+    description: Buyer who placed the PO.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity making the purchase.
+  - name: qty_ordered
+    type: INTEGER
+    description: Units ordered.
+  - name: unit_cost
+    type: DECIMAL
+    description: Cost per unit in USD.
+  - name: ext_cost
+    type: DECIMAL
+    description: Extended cost (unit_cost × qty_ordered) — the spend value of the
+      line.
+  - name: late_days
+    type: INTEGER
+    description: Days received after promised date (0 = on time). The planted
+      supplier-reliability signal — averages ~0.1d for tier A up to ~15d for
+      tier D.
+- name: p2p_vendor_bill
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per vendor bill, issued at goods receipt (one bill per PO line).
+  description: Supplier bills owed by the distributor — the Accounts Payable
+    record and the source of DPO. open_balance is nonzero for bills unpaid at the
+    end of loaded history. Query as mro_distributor.p2p_vendor_bill.
+  columns:
+  - name: bill_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each vendor bill.
+  - name: bill_number
+    type: VARCHAR
+    description: Human-readable bill number (e.g., VB-000123).
+  - name: bill_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Bill date — equals the goods receipt date (YYYYMMDD key).
+  - name: due_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Due date per the supplier's payment terms (YYYYMMDD key).
+  - name: supplier_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_supplier.supplier_key
+    description: Supplier owed.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity that owes the bill.
+  - name: bill_amount
+    type: DECIMAL
+    description: Bill total in USD.
+  - name: open_balance
+    type: DECIMAL
+    description: Unpaid amount remaining in USD. Zero for fully paid bills.
+- name: p2p_bill_payment
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per payment made against a vendor bill (bills unpaid at end of
+    history have no payment row).
+  description: Payments the distributor made to suppliers. days_to_pay is the
+    basis for DPO (~39 days weighted) — how long the company holds cash before
+    paying vendors. Query as mro_distributor.p2p_bill_payment.
+  columns:
+  - name: bill_payment_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each bill payment.
+  - name: bill_key
+    type: BIGINT
+    foreign_key: mro_distributor.p2p_vendor_bill.bill_key
+    description: The vendor bill this payment settles.
+  - name: payment_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Date the payment was made (YYYYMMDD key into dim_date).
+  - name: supplier_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_supplier.supplier_key
+    description: Supplier paid.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity making the payment.
+  - name: amount_paid
+    type: DECIMAL
+    description: Amount paid in USD.
+  - name: days_to_pay
+    type: INTEGER
+    description: Days from bill date to payment date — the per-bill payment lag.
+- name: inv_balance_snapshot
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per item × warehouse × day for actively stocked pairs (~1,810
+    pairs, daily for 18 months — the largest table at ~971K rows).
+  description: Daily inventory position — quantity and value on hand per SKU per
+    warehouse, with an explicit stockout flag. The source of inventory value, DIO,
+    and stockout-rate metrics. Stockouts concentrate in items sourced from
+    unreliable (tier C/D) suppliers — the middle link of the supplier→cash chain.
+    Query as mro_distributor.inv_balance_snapshot.
+  columns:
+  - name: snapshot_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each snapshot row.
+  - name: snapshot_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Snapshot date (YYYYMMDD key into dim_date).
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU measured.
+  - name: warehouse_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_warehouse.warehouse_key
+    description: The stocking warehouse.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity owning the stock.
+  - name: qty_on_hand
+    type: INTEGER
+    description: Units on hand at end of day.
+  - name: value_on_hand
+    type: DECIMAL
+    description: Inventory value at cost in USD (qty_on_hand × unit cost).
+  - name: is_stockout
+    type: BOOLEAN
+    description: True when qty_on_hand is zero — the stockout signal, ~3% of
+      item-days for reliable-supplier items rising to ~13% for tier-D-sourced
+      items.
+- name: inv_transaction
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per inventory movement (receipts from POs, issues from
+    shipments).
+  description: Inventory movement ledger — signed quantity and value deltas for
+    receipts and issues. Complements the daily snapshot with transaction-level
+    traceability, including which supplier a receipt came from. Query as
+    mro_distributor.inv_transaction.
+  columns:
+  - name: inv_txn_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each inventory transaction.
+  - name: txn_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Transaction date (YYYYMMDD key into dim_date).
+  - name: item_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_item.item_key
+    description: The SKU moved.
+  - name: warehouse_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_warehouse.warehouse_key
+    description: Warehouse where the movement occurred.
+  - name: supplier_key
+    type: INTEGER
+    nullable: true
+    foreign_key: mro_distributor.dim_supplier.supplier_key
+    description: Source supplier for receipts; null for issues.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity of the movement.
+  - name: txn_type
+    type: VARCHAR
+    description: 'Movement type: Receipt (goods in from supplier), Issue (goods
+      out to customer), Adjustment, or Transfer.'
+    values:
+    - Receipt
+    - Issue
+    - Adjustment
+    - Transfer
+  - name: qty_delta
+    type: INTEGER
+    description: Signed unit change — positive for receipts, negative for issues.
+  - name: value_delta
+    type: DECIMAL
+    description: Signed value change at cost in USD.
+- name: gl_journal_line
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per journal line. Revenue/AR lines post at invoice (ship) date;
+    COGS/Inventory lines post at ship date.
+  description: General ledger journal lines — the double-entry accounting record
+    generated from billing and shipment flows. Debits and credits by account; the
+    accounting source of truth for revenue and COGS trends. Query as
+    mro_distributor.gl_journal_line.
+  columns:
+  - name: je_line_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each journal line.
+  - name: je_number
+    type: VARCHAR
+    description: Journal entry number (e.g., JE-0000123).
+  - name: posting_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Posting date (YYYYMMDD key into dim_date).
+  - name: gl_account_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_gl_account.gl_account_key
+    description: GL account posted to.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity of the posting.
+  - name: employee_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_employee.employee_key
+    description: Employee associated with the posting.
+  - name: debit_amount
+    type: DECIMAL
+    description: Debit amount in USD (zero for credit lines).
+  - name: credit_amount
+    type: DECIMAL
+    description: Credit amount in USD (zero for debit lines).
+  - name: net_amount
+    type: DECIMAL
+    description: Debit minus credit — negative for net-credit lines such as
+      revenue postings.
+- name: gl_account_balance
+  tenant: mro
+  schema: mro_distributor
+  type: fact
+  grain: One row per GL account per month (period balance and running YTD).
+  description: Monthly GL account balances rolled up from journal lines — the
+    fastest path to revenue and COGS by period without aggregating raw journal
+    lines. Sign convention follows net_amount, so revenue balances are negative
+    (credit) and are negated for reporting. Query as
+    mro_distributor.gl_account_balance.
+  columns:
+  - name: balance_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each balance row.
+  - name: period_date_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_date.date_key
+    description: Period marker date near month end (YYYYMMDD key into dim_date).
+  - name: gl_account_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_gl_account.gl_account_key
+    description: GL account the balance belongs to.
+  - name: subsidiary_key
+    type: INTEGER
+    foreign_key: mro_distributor.dim_subsidiary.subsidiary_key
+    description: Legal entity of the balance.
+  - name: period_balance
+    type: DECIMAL
+    description: Net activity for the month (debits minus credits) in USD.
+  - name: ytd_balance
+    type: DECIMAL
+    description: Running year-to-date balance in USD.

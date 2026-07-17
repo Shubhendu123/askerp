@@ -23,6 +23,24 @@ metric_domains:
     description: "Metrics on order fulfillment, returns, and operational efficiency."
     owner: "Operations"
 
+  - name: "Order to Cash"
+    description: "MRO tenant: order, fulfillment, and revenue metrics for the order-to-cash cycle."
+    owner: "Sales"
+  - name: "Receivables"
+    description: "MRO tenant: invoicing, collections, and DSO metrics."
+    owner: "Finance"
+  - name: "Procurement"
+    description: "MRO tenant: supplier spend, delivery performance, and payables metrics."
+    owner: "Operations"
+  - name: "Inventory"
+    description: "MRO tenant: stock levels, availability, and inventory efficiency metrics."
+    owner: "Operations"
+  - name: "General Ledger"
+    description: "MRO tenant: accounting-view metrics from GL balances."
+    owner: "Finance"
+  - name: "Working Capital"
+    description: "MRO tenant: cross-subject-area cash cycle metrics."
+    owner: "Finance"
 metrics:
 
   # ────────────────────────────────────────────────────────────────
@@ -30,6 +48,7 @@ metrics:
   # ────────────────────────────────────────────────────────────────
 
   - name: total_revenue
+    tenant: northwind
     domain: Revenue
     sentiment: positive
     description: |
@@ -67,6 +86,7 @@ metrics:
       - "How much did we book in Q3 2024?"
 
   - name: revenue_growth_yoy
+    tenant: northwind
     domain: Revenue
     sentiment: none
     description: |
@@ -114,6 +134,7 @@ metrics:
       - "Are we growing faster than 2023?"
 
   - name: average_order_value
+    tenant: northwind
     domain: Revenue
     sentiment: positive
     description: |
@@ -149,6 +170,7 @@ metrics:
       - "Which product category has the highest AOV?"
 
   - name: revenue_by_segment
+    tenant: northwind
     domain: Revenue
     sentiment: none
     description: |
@@ -192,6 +214,7 @@ metrics:
   # ────────────────────────────────────────────────────────────────
 
   - name: gross_margin_pct
+    tenant: northwind
     domain: Profitability
     sentiment: positive
     description: |
@@ -232,6 +255,7 @@ metrics:
       - "Has our margin been declining this year?"
 
   - name: gross_profit
+    tenant: northwind
     domain: Profitability
     sentiment: positive
     description: |
@@ -270,6 +294,7 @@ metrics:
       - "How much profit did we make on Conference Tables in 2024?"
 
   - name: cogs
+    tenant: northwind
     domain: Profitability
     sentiment: negative
     description: |
@@ -311,6 +336,7 @@ metrics:
   # ────────────────────────────────────────────────────────────────
 
   - name: active_customer_count
+    tenant: northwind
     domain: Customer
     sentiment: positive
     description: |
@@ -348,6 +374,7 @@ metrics:
       - "Is our active customer base growing?"
 
   - name: top_customer_concentration
+    tenant: northwind
     domain: Customer
     sentiment: negative
     description: |
@@ -393,6 +420,7 @@ metrics:
       - "Are we too dependent on a few large customers?"
 
   - name: customer_churn_count
+    tenant: northwind
     domain: Customer
     sentiment: negative
     description: |
@@ -444,6 +472,7 @@ metrics:
       - "Did we lose any Enterprise customers in Q4 2024?"
 
   - name: repeat_customer_rate
+    tenant: northwind
     domain: Customer
     sentiment: positive
     description: |
@@ -498,6 +527,7 @@ metrics:
   # ────────────────────────────────────────────────────────────────
 
   - name: cancellation_rate
+    tenant: northwind
     domain: Operational
     sentiment: negative
     description: |
@@ -538,6 +568,7 @@ metrics:
       - "Has our refund rate been unusually high this year?"
 
   - name: on_time_payment_rate
+    tenant: northwind
     domain: Operational
     sentiment: positive
     description: |
@@ -578,6 +609,7 @@ metrics:
       - "Has payment timeliness changed over the past year?"
 
   - name: order_volume
+    tenant: northwind
     domain: Operational
     sentiment: positive
     description: |
@@ -617,6 +649,7 @@ metrics:
       - "Is order volume growing faster in West or East?"
 
   - name: average_days_to_pay
+    tenant: northwind
     domain: Operational
     sentiment: negative
     description: |
@@ -654,3 +687,1057 @@ metrics:
       - "What is our average DSO this year?"
       - "How long does it take Enterprise customers to pay versus SMB?"
       - "Has our average days to pay improved since last year?"
+
+  # ────────────────────────────────────────────────────────────────
+  # MRO DISTRIBUTOR (TENANT 2) — 25-metric launch set (D-033)
+  # All formulas are runnable DuckDB SQL against mro_distributor.*
+  # with no placeholder parameters. History window: 18 months.
+  # ────────────────────────────────────────────────────────────────
+
+  # ── Order to Cash (6) ──
+
+  - name: total_revenue
+    tenant: mro
+    domain: Order to Cash
+    sentiment: positive
+    grain: Company total over full loaded history (18 months).
+    tables:
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Booked revenue for the MRO distributor — the extended selling amount of
+      all sales order lines. This is the tenant's headline top-line metric,
+      roughly $298M on an annualized basis with ~8% year-over-year growth and
+      a Q4 seasonal uplift. Finance reports it in monthly close and board
+      packs; Sales uses it for quota and territory planning. Revenue is
+      concentrated: the top 20% of customers contribute about 63% of it.
+    formula: |
+      SELECT SUM(sol.ext_amount)
+      FROM mro_distributor.o2c_sales_order_line sol
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_item.category
+      - dim_warehouse.region
+      - dim_subsidiary.subsidiary_name
+      - dim_date.year_num
+      - dim_date.quarter_num
+      - dim_date.month_num
+    synonyms:
+      - revenue
+      - sales
+      - top line
+      - bookings
+      - total sales
+      - how much did we sell
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What was total revenue last quarter?"
+      - "Show me sales by product category"
+      - "How much revenue came from Manufacturing customers?"
+
+  - name: gross_margin_pct
+    tenant: mro
+    domain: Order to Cash
+    sentiment: positive
+    grain: Company total over full loaded history; margin percentage of revenue.
+    tables:
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Gross margin as a percentage of revenue, computed from line-level margin
+      dollars carried on every sales order line. Margins are deliberately
+      differentiated by category — Fasteners run thinnest (~22%), then
+      Electrical (~28%), Safety and Tools (~35-36%), with MRO consumables
+      richest (~43%) — so category mix shifts move the blended number. Finance
+      reviews blended and per-category margin monthly; a category drifting
+      below its band triggers a cost or pricing review.
+    formula: |
+      SELECT SUM(sol.margin_amount) / SUM(sol.ext_amount) * 100
+      FROM mro_distributor.o2c_sales_order_line sol
+    dimensions_allowed:
+      - dim_item.category
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - margin
+      - gross margin
+      - profit margin
+      - gm percent
+      - margin percentage
+      - how profitable are we
+    definition_owner: Finance
+    format: percentage
+    example_questions:
+      - "What is our gross margin percentage?"
+      - "Which category has the lowest margin?"
+      - "How does Fasteners margin compare to MRO consumables?"
+
+  - name: avg_order_value
+    tenant: mro
+    domain: Order to Cash
+    sentiment: positive
+    grain: Per order (grouped by sales order number), averaged over full history.
+    tables:
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Mean value of a sales order. Sales leadership uses AOV with order count
+      to decompose revenue growth into bigger orders versus more orders — the
+      distributor's B2B orders average in the low thousands of dollars.
+      A falling AOV alongside rising order count usually means customer mix is
+      shifting toward smaller branch-supplied accounts.
+    formula: |
+      SELECT AVG(order_total)
+      FROM (
+        SELECT sol.so_number, SUM(sol.ext_amount) AS order_total
+        FROM mro_distributor.o2c_sales_order_line sol
+        GROUP BY sol.so_number
+      )
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_item.category
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - aov
+      - average order value
+      - mean order size
+      - ticket size
+      - deal size
+    definition_owner: Sales
+    format: currency
+    example_questions:
+      - "What is our average order value?"
+      - "Has ticket size changed this year?"
+      - "Which segment places the largest orders?"
+
+  - name: order_count
+    tenant: mro
+    domain: Order to Cash
+    sentiment: positive
+    grain: Company total over full loaded history; count of distinct orders.
+    tables:
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Count of distinct sales orders placed. Operations uses order count for
+      warehouse staffing and pick-line capacity; Sales pairs it with average
+      order value to separate volume growth from deal-size growth. Order flow
+      shows weekday concentration with weekend dips and a Q4 uplift.
+    formula: |
+      SELECT COUNT(DISTINCT sol.so_number)
+      FROM mro_distributor.o2c_sales_order_line sol
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_warehouse.warehouse_name
+      - dim_date.year_num
+      - dim_date.quarter_num
+      - dim_date.month_num
+    synonyms:
+      - number of orders
+      - order volume
+      - transactions
+      - how many orders
+      - deal count
+    definition_owner: Sales
+    format: integer
+    example_questions:
+      - "How many orders did we receive last month?"
+      - "Which warehouse handles the most orders?"
+      - "Is order volume growing year over year?"
+
+  - name: avg_order_to_ship_days
+    tenant: mro
+    domain: Order to Cash
+    sentiment: negative
+    grain: Per fulfillment line, averaged over full history.
+    tables:
+      - mro_distributor.o2c_fulfillment_line
+    description: |
+      Average days from order placement to shipment — the customer-facing
+      fulfillment speed measure. Company average is around 2-3 days, but items
+      sourced from unreliable (tier C and D) suppliers ship materially slower
+      (up to ~7 days) because they stock out more often. Rising order-to-ship
+      days is the operational symptom that connects supplier lateness to
+      delayed invoicing and slower cash collection.
+    formula: |
+      SELECT AVG(ff.order_to_ship_days)
+      FROM mro_distributor.o2c_fulfillment_line ff
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_customer.segment
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - fulfillment time
+      - shipping speed
+      - order to ship
+      - fulfillment lead time
+      - how fast do we ship
+    definition_owner: Operations
+    format: days
+    example_questions:
+      - "How long does it take us to ship an order?"
+      - "Which warehouse ships fastest?"
+      - "Has fulfillment speed gotten worse this year?"
+
+  - name: return_rate_pct
+    tenant: mro
+    domain: Order to Cash
+    sentiment: negative
+    grain: Company total over full history; return lines as a share of order lines.
+    tables:
+      - mro_distributor.o2c_return_line
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Percentage of sales order lines that come back as customer returns —
+      about 3% overall. Returns carry coded reasons (Damaged, Wrong Item,
+      Overordered, Quality), so Operations reviews rate by reason and by item
+      category to separate carrier damage from supplier quality problems.
+      A sustained rise above the baseline triggers a supplier quality review.
+    formula: |
+      SELECT
+        (SELECT COUNT(*) FROM mro_distributor.o2c_return_line) * 100.0
+        / (SELECT COUNT(*) FROM mro_distributor.o2c_sales_order_line)
+    dimensions_allowed:
+      - dim_item.category
+      - dim_customer.segment
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - return rate
+      - returns percentage
+      - rma rate
+      - how many orders are returned
+      - credit rate
+    definition_owner: Operations
+    format: percentage
+    example_questions:
+      - "What percentage of orders get returned?"
+      - "Which category has the most returns?"
+      - "Are quality-related returns increasing?"
+
+  # ── Receivables (5) ──
+
+  - name: dso_days
+    tenant: mro
+    domain: Receivables
+    sentiment: negative
+    grain: Company total; dollar-weighted average collection days over full history.
+    tables:
+      - mro_distributor.ar_payment_application
+    description: |
+      Days Sales Outstanding — the dollar-weighted average number of days from
+      invoice to cash across all applied payments, running about 44 days.
+      Finance tracks DSO in every close because it directly sets working
+      capital needs. Two independent forces push it up: chronic slow-paying
+      customers (about 15% of accounts) and supplier-driven fulfillment delays
+      that push invoice dates later. Compare with dpo_days and dio_days to
+      compute the cash conversion cycle.
+    formula: |
+      SELECT SUM(pa.days_to_pay * pa.amount_applied) / SUM(pa.amount_applied)
+      FROM mro_distributor.ar_payment_application pa
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_customer.credit_terms
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - dso
+      - days sales outstanding
+      - collection time
+      - how long to collect
+      - average collection days
+      - receivables days
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "What is our DSO?"
+      - "How long does it take to collect from customers?"
+      - "Is DSO trending up or down this year?"
+
+  - name: ar_open_balance
+    tenant: mro
+    domain: Receivables
+    sentiment: negative
+    grain: Company total; open receivables as of end of loaded history.
+    tables:
+      - mro_distributor.ar_invoice
+    description: |
+      Total accounts receivable still uncollected — the sum of open balances
+      across all invoices as of the end of loaded history. This is the cash
+      currently tied up in customer credit. Collections works this balance by
+      aging bucket; Finance sanity-checks it against revenue and DSO (AR of
+      roughly DSO-days' worth of daily revenue is expected).
+    formula: |
+      SELECT SUM(i.open_balance)
+      FROM mro_distributor.ar_invoice i
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_customer.credit_terms
+      - dim_subsidiary.subsidiary_name
+    synonyms:
+      - open receivables
+      - ar balance
+      - outstanding invoices
+      - money owed to us
+      - uncollected revenue
+      - accounts receivable
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "How much AR is outstanding right now?"
+      - "Which customer segment owes us the most?"
+      - "What is our open receivables balance?"
+
+  - name: overdue_invoice_pct
+    tenant: mro
+    domain: Receivables
+    sentiment: negative
+    grain: Per paid invoice, share paid after due date, over full history.
+    tables:
+      - mro_distributor.ar_invoice
+      - mro_distributor.ar_payment_application
+    description: |
+      Share of paid invoices that were settled after their due date. Most
+      customers pay a few days past terms, so this rate is structurally high —
+      what matters is the trend and the gap between segments. Collections uses
+      it to prioritize dunning; a rising overdue share alongside rising DSO
+      means payment behavior is deteriorating rather than billing timing
+      shifting.
+    formula: |
+      SELECT
+        COUNT(CASE WHEN pa.payment_date_key > i.due_date_key THEN 1 END) * 100.0
+        / COUNT(*)
+      FROM mro_distributor.ar_invoice i
+      JOIN mro_distributor.ar_payment_application pa USING (invoice_key)
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_customer.credit_terms
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - overdue invoices
+      - late payments
+      - past due rate
+      - invoices paid late
+      - delinquency rate
+    definition_owner: Finance
+    format: percentage
+    example_questions:
+      - "What share of invoices are paid late?"
+      - "Which segment pays past due most often?"
+      - "Is our late-payment rate getting worse?"
+
+  - name: avg_days_to_pay_vs_terms
+    tenant: mro
+    domain: Receivables
+    sentiment: negative
+    grain: Per payment, average days beyond contractual terms, over full history.
+    tables:
+      - mro_distributor.ar_payment_application
+      - mro_distributor.dim_customer
+    description: |
+      Average days customers pay beyond their contractual credit terms —
+      payment slack net of terms. This isolates payment behavior from terms
+      mix: a customer on Net 60 paying at day 64 has the same slack as one on
+      Net 30 paying at day 34. Around 15% of accounts are chronic slow payers
+      averaging roughly 20 days past terms versus about 4 days for everyone
+      else; this metric is how that split surfaces at company level.
+    formula: |
+      SELECT AVG(pa.days_to_pay - c.credit_days)
+      FROM mro_distributor.ar_payment_application pa
+      JOIN mro_distributor.dim_customer c USING (customer_key)
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_customer.credit_terms
+      - dim_date.year_num
+    synonyms:
+      - payment slack
+      - days beyond terms
+      - late by how much
+      - terms compliance
+      - payment behavior vs terms
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "How many days past terms do customers pay on average?"
+      - "Do Government customers respect their payment terms?"
+      - "Which accounts pay furthest beyond terms?"
+
+  - name: collection_days_by_segment
+    tenant: mro
+    domain: Receivables
+    sentiment: none
+    grain: Per customer segment; dollar-weighted collection days over full history.
+    tables:
+      - mro_distributor.ar_payment_application
+      - mro_distributor.dim_customer
+    description: |
+      Dollar-weighted average days-to-pay broken out by customer segment —
+      the segment-level view of DSO. Finance uses it to set credit policy by
+      vertical: segments that collect slowest may warrant tighter terms or
+      deposits, and the segment mix explains part of any company-level DSO
+      movement.
+    formula: |
+      SELECT
+        c.segment,
+        SUM(pa.days_to_pay * pa.amount_applied) / SUM(pa.amount_applied)
+          AS collection_days
+      FROM mro_distributor.ar_payment_application pa
+      JOIN mro_distributor.dim_customer c USING (customer_key)
+      GROUP BY c.segment
+      ORDER BY collection_days DESC
+    dimensions_allowed:
+      - dim_customer.segment
+      - dim_customer.region
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - dso by segment
+      - collection time by vertical
+      - segment payment speed
+      - which segment pays slowest
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "Which customer segment pays slowest?"
+      - "Show collection days by segment"
+      - "Does Construction pay slower than Manufacturing?"
+
+  # ── Procurement (5) ──
+
+  - name: dpo_days
+    tenant: mro
+    domain: Procurement
+    sentiment: positive
+    grain: Company total; dollar-weighted average days to pay suppliers, full history.
+    tables:
+      - mro_distributor.p2p_bill_payment
+    description: |
+      Days Payable Outstanding — the dollar-weighted average days from vendor
+      bill to payment, running about 39 days. DPO measures how long the
+      company holds cash before paying suppliers; a higher DPO funds working
+      capital but straining strategic suppliers too far risks allocation and
+      service. Finance balances DPO against negotiated terms (Net 30/45/60)
+      and reviews it as one leg of the cash conversion cycle.
+    formula: |
+      SELECT SUM(bp.days_to_pay * bp.amount_paid) / SUM(bp.amount_paid)
+      FROM mro_distributor.p2p_bill_payment bp
+    dimensions_allowed:
+      - dim_supplier.payment_terms
+      - dim_supplier.reliability_tier
+      - dim_subsidiary.subsidiary_name
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - dpo
+      - days payable outstanding
+      - how long do we take to pay suppliers
+      - payables days
+      - vendor payment speed
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "What is our DPO?"
+      - "How quickly do we pay our vendors?"
+      - "Are we stretching supplier payments more than last year?"
+
+  - name: supplier_on_time_delivery_pct
+    tenant: mro
+    domain: Procurement
+    sentiment: positive
+    grain: Per PO line, share received on or before promised date, full history.
+    tables:
+      - mro_distributor.p2p_purchase_order_line
+    description: |
+      Percentage of purchase order lines received on or before the promised
+      date (late_days = 0). On-time delivery follows the supplier reliability
+      gradient: tier-A suppliers deliver on time the great majority of the
+      time while tier-D suppliers are late on most POs, averaging ~15 days
+      late. Procurement reviews OTD by supplier and tier quarterly; sustained
+      misses move volume to reliable sources. This is the leading indicator of
+      the stockout and fulfillment problems measured downstream.
+    formula: |
+      SELECT
+        COUNT(CASE WHEN po.late_days = 0 THEN 1 END) * 100.0 / COUNT(*)
+      FROM mro_distributor.p2p_purchase_order_line po
+    dimensions_allowed:
+      - dim_supplier.reliability_tier
+      - dim_supplier.supplier_name
+      - dim_supplier.region
+      - dim_item.category
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - otd
+      - on-time delivery
+      - supplier delivery performance
+      - which suppliers deliver on time
+      - delivery reliability
+      - supplier quality
+    definition_owner: Operations
+    format: percentage
+    example_questions:
+      - "What is our supplier on-time delivery rate?"
+      - "Which suppliers are chronically late?"
+      - "How does on-time delivery differ by reliability tier?"
+
+  - name: avg_po_late_days_by_supplier
+    tenant: mro
+    domain: Procurement
+    sentiment: negative
+    grain: Per supplier; average days late across that supplier's PO lines.
+    tables:
+      - mro_distributor.p2p_purchase_order_line
+      - mro_distributor.dim_supplier
+    description: |
+      Average days late per supplier — received date minus promised date,
+      averaged across each supplier's PO lines and ranked worst first. This is
+      the supplier scorecard view Procurement takes into vendor reviews. The
+      lateness gradient is tiered: A ≈ 0 days, B ≈ 2, C ≈ 7, D ≈ 15. Because
+      each SKU is single-sourced, a late supplier translates directly into
+      stockouts for its items.
+    formula: |
+      SELECT
+        s.supplier_name,
+        s.reliability_tier,
+        AVG(po.late_days) AS avg_late_days,
+        COUNT(*) AS po_lines
+      FROM mro_distributor.p2p_purchase_order_line po
+      JOIN mro_distributor.dim_supplier s USING (supplier_key)
+      GROUP BY s.supplier_name, s.reliability_tier
+      ORDER BY avg_late_days DESC
+    dimensions_allowed:
+      - dim_supplier.supplier_name
+      - dim_supplier.reliability_tier
+      - dim_supplier.region
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - supplier lateness
+      - late suppliers
+      - po delay by supplier
+      - worst suppliers
+      - supplier delay ranking
+    definition_owner: Operations
+    format: days
+    example_questions:
+      - "Which suppliers have the worst delivery delays?"
+      - "Rank suppliers by average days late"
+      - "How late is our worst supplier on average?"
+
+  - name: open_payables
+    tenant: mro
+    domain: Procurement
+    sentiment: none
+    grain: Company total; unpaid vendor bills as of end of loaded history.
+    tables:
+      - mro_distributor.p2p_vendor_bill
+    description: |
+      Total accounts payable still unpaid — the sum of open balances across
+      vendor bills as of the end of loaded history. This is cash the company
+      currently owes suppliers. Treasury uses it for short-term cash
+      forecasting alongside DPO; a sudden drop can mean early payments that
+      sacrifice working capital.
+    formula: |
+      SELECT SUM(vb.open_balance)
+      FROM mro_distributor.p2p_vendor_bill vb
+    dimensions_allowed:
+      - dim_supplier.supplier_name
+      - dim_supplier.payment_terms
+      - dim_subsidiary.subsidiary_name
+    synonyms:
+      - accounts payable
+      - ap balance
+      - open bills
+      - money we owe suppliers
+      - outstanding payables
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "How much do we owe suppliers right now?"
+      - "What is our open payables balance?"
+      - "Which supplier are we most indebted to?"
+
+  - name: spend_by_supplier
+    tenant: mro
+    domain: Procurement
+    sentiment: none
+    grain: Per supplier; total PO spend and share of total, full history.
+    tables:
+      - mro_distributor.p2p_purchase_order_line
+      - mro_distributor.dim_supplier
+    description: |
+      Purchase spend by supplier with each supplier's share of total spend,
+      ranked largest first. Spend is Pareto-concentrated — the top 20% of
+      suppliers carry roughly three quarters of spend — so this view drives
+      strategic-supplier segmentation, negotiation priorities, and
+      concentration-risk review. Cross-reference with reliability tier to see
+      whether large spend sits with reliable or chronically late suppliers.
+    formula: |
+      SELECT
+        s.supplier_name,
+        s.reliability_tier,
+        SUM(po.ext_cost) AS spend,
+        SUM(po.ext_cost) * 100.0 / SUM(SUM(po.ext_cost)) OVER () AS pct_of_total
+      FROM mro_distributor.p2p_purchase_order_line po
+      JOIN mro_distributor.dim_supplier s USING (supplier_key)
+      GROUP BY s.supplier_name, s.reliability_tier
+      ORDER BY spend DESC
+    dimensions_allowed:
+      - dim_supplier.supplier_name
+      - dim_supplier.reliability_tier
+      - dim_supplier.region
+      - dim_item.category
+      - dim_date.year_num
+    synonyms:
+      - supplier spend
+      - procurement spend
+      - purchasing by vendor
+      - top suppliers by spend
+      - spend concentration
+    definition_owner: Operations
+    format: currency
+    example_questions:
+      - "Who are our biggest suppliers by spend?"
+      - "How concentrated is our supplier spend?"
+      - "How much do we spend with tier-D suppliers?"
+
+  # ── Inventory (5) ──
+
+  - name: dio_days
+    tenant: mro
+    domain: Inventory
+    sentiment: negative
+    grain: Company total; average inventory value over average daily COGS.
+    tables:
+      - mro_distributor.inv_balance_snapshot
+      - mro_distributor.o2c_sales_order_line
+    description: |
+      Days Inventory Outstanding — average daily inventory value divided by
+      average daily cost of goods sold, running about 85 days. A distributor
+      carries deep stock across ~1,200 SKUs and 4 warehouses, so DIO is the
+      largest component of the cash conversion cycle. Rising DIO with flat
+      sales means stock is building faster than it sells; falling DIO with
+      rising stockouts means the buffer is too thin.
+    formula: |
+      SELECT
+        (SELECT AVG(daily_value) FROM (
+           SELECT snap.snapshot_date_key, SUM(snap.value_on_hand) AS daily_value
+           FROM mro_distributor.inv_balance_snapshot snap
+           GROUP BY snap.snapshot_date_key))
+        /
+        (SELECT SUM(sol.ext_cost) / COUNT(DISTINCT sol.order_date_key)
+         FROM mro_distributor.o2c_sales_order_line sol)
+        AS dio_days
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - dio
+      - days inventory outstanding
+      - inventory days
+      - days of stock
+      - how long does inventory sit
+    definition_owner: Operations
+    format: days
+    example_questions:
+      - "What is our DIO?"
+      - "How many days of inventory are we carrying?"
+      - "Is inventory sitting longer than last year?"
+
+  - name: inventory_value_on_hand
+    tenant: mro
+    domain: Inventory
+    sentiment: none
+    grain: Company total as of the latest snapshot date.
+    tables:
+      - mro_distributor.inv_balance_snapshot
+    description: |
+      Current inventory value at cost — the sum of value on hand across all
+      SKUs and warehouses on the most recent snapshot date. This is the
+      working capital tied up in stock right now. Operations slices it by
+      warehouse and category for rebalancing; Finance reconciles it against
+      the GL inventory account at close.
+    formula: |
+      SELECT SUM(snap.value_on_hand)
+      FROM mro_distributor.inv_balance_snapshot snap
+      WHERE snap.snapshot_date_key = (
+        SELECT MAX(s2.snapshot_date_key)
+        FROM mro_distributor.inv_balance_snapshot s2)
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_subsidiary.subsidiary_name
+    synonyms:
+      - inventory value
+      - stock on hand
+      - inventory balance
+      - how much inventory do we have
+      - stock value
+    definition_owner: Operations
+    format: currency
+    example_questions:
+      - "What is our current inventory value?"
+      - "How much stock is in the Chicago DC?"
+      - "Which category ties up the most inventory dollars?"
+
+  - name: stockout_rate_pct
+    tenant: mro
+    domain: Inventory
+    sentiment: negative
+    grain: Per item-warehouse-day; share of snapshot rows at zero on hand.
+    tables:
+      - mro_distributor.inv_balance_snapshot
+    description: |
+      Percentage of item-warehouse-days with zero quantity on hand — the
+      availability failure rate, around 4% overall. Stockouts are not random:
+      they concentrate in items sourced from unreliable (tier C and D)
+      suppliers, climbing from ~3% for tier-A-sourced items to ~13% for
+      tier-D. A stocked-out item can't ship, so this metric is the middle
+      link between supplier lateness and slow fulfillment.
+    formula: |
+      SELECT AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END)
+      FROM mro_distributor.inv_balance_snapshot snap
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_supplier.reliability_tier
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - stockouts
+      - out of stock rate
+      - availability
+      - stockout frequency
+      - how often are we out of stock
+    definition_owner: Operations
+    format: percentage
+    example_questions:
+      - "What is our stockout rate?"
+      - "Which items are out of stock most often?"
+      - "Do unreliable suppliers cause more stockouts?"
+
+  - name: inventory_turns
+    tenant: mro
+    domain: Inventory
+    sentiment: positive
+    grain: Company total; annualized COGS over average inventory value.
+    tables:
+      - mro_distributor.o2c_sales_order_line
+      - mro_distributor.inv_balance_snapshot
+    description: |
+      How many times per year inventory sells through — annualized COGS
+      divided by average inventory value, the inverse view of DIO (turns of
+      ~4.3 correspond to ~85 days of stock). Distribution executives quote
+      turns as the headline efficiency number; improving turns without
+      raising stockouts is the standing operational goal.
+    formula: |
+      SELECT
+        (SELECT SUM(sol.ext_cost) / COUNT(DISTINCT sol.order_date_key) * 365
+         FROM mro_distributor.o2c_sales_order_line sol)
+        /
+        (SELECT AVG(daily_value) FROM (
+           SELECT snap.snapshot_date_key, SUM(snap.value_on_hand) AS daily_value
+           FROM mro_distributor.inv_balance_snapshot snap
+           GROUP BY snap.snapshot_date_key))
+        AS inventory_turns
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+      - dim_date.year_num
+    synonyms:
+      - turns
+      - inventory turnover
+      - stock rotation
+      - how fast does inventory turn
+      - turnover ratio
+    definition_owner: Operations
+    format: integer
+    example_questions:
+      - "What are our inventory turns?"
+      - "How fast does our stock turn over?"
+      - "Which category turns slowest?"
+
+  - name: slow_moving_inventory_value
+    tenant: mro
+    domain: Inventory
+    sentiment: negative
+    grain: Company total; current on-hand value of the slowest quintile of SKUs.
+    tables:
+      - mro_distributor.inv_balance_snapshot
+      - mro_distributor.o2c_fulfillment_line
+    description: |
+      Inventory value currently tied up in slow movers — SKUs in the bottom
+      20% by lifetime units shipped, valued at the latest snapshot. Slow
+      movers consume warehouse space and working capital while contributing
+      little velocity; this is the write-down and clearance-review watchlist.
+      Operations reviews it quarterly against the C-velocity item list.
+    formula: |
+      WITH velocity AS (
+        SELECT ff.item_key, SUM(ff.qty_shipped) AS units
+        FROM mro_distributor.o2c_fulfillment_line ff
+        GROUP BY ff.item_key),
+      cutoff AS (
+        SELECT quantile_cont(units, 0.2) AS q FROM velocity)
+      SELECT SUM(snap.value_on_hand)
+      FROM mro_distributor.inv_balance_snapshot snap
+      JOIN velocity v USING (item_key), cutoff
+      WHERE snap.snapshot_date_key = (
+        SELECT MAX(s2.snapshot_date_key)
+        FROM mro_distributor.inv_balance_snapshot s2)
+        AND v.units <= cutoff.q
+    dimensions_allowed:
+      - dim_warehouse.warehouse_name
+      - dim_item.category
+    synonyms:
+      - slow movers
+      - dead stock
+      - obsolete inventory
+      - slow moving stock value
+      - excess inventory
+    definition_owner: Operations
+    format: currency
+    example_questions:
+      - "How much is tied up in slow-moving inventory?"
+      - "What is our dead stock exposure?"
+      - "Which warehouse holds the most slow movers?"
+
+  # ── General Ledger (2) ──
+
+  - name: gl_revenue_by_period
+    tenant: mro
+    domain: General Ledger
+    sentiment: positive
+    grain: Per month; revenue-account activity from monthly GL balances.
+    tables:
+      - mro_distributor.gl_account_balance
+      - mro_distributor.dim_gl_account
+      - mro_distributor.dim_date
+    description: |
+      Monthly revenue as recorded in the general ledger — the accounting view,
+      from the Revenue account's period balances. Revenue posts at invoice
+      (ship) date, so GL revenue lags booked orders slightly and excludes
+      unshipped orders. Revenue is a credit-balance account, so period
+      balances are negated for reporting. Finance uses this as the
+      close-of-books number that operational revenue reconciles against.
+    formula: |
+      SELECT
+        d.year_num,
+        d.month_num,
+        -SUM(b.period_balance) AS gl_revenue
+      FROM mro_distributor.gl_account_balance b
+      JOIN mro_distributor.dim_gl_account a USING (gl_account_key)
+      JOIN mro_distributor.dim_date d ON b.period_date_key = d.date_key
+      WHERE a.account_name = 'Revenue'
+      GROUP BY d.year_num, d.month_num
+      ORDER BY d.year_num, d.month_num
+    dimensions_allowed:
+      - dim_date.year_num
+      - dim_date.month_num
+      - dim_date.fiscal_period
+      - dim_subsidiary.subsidiary_name
+    synonyms:
+      - gl revenue
+      - booked revenue per books
+      - revenue per the ledger
+      - monthly revenue from gl
+      - recognized revenue by month
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "Show monthly revenue from the GL"
+      - "What did the books recognize as revenue in Q4?"
+      - "Does GL revenue match operational revenue?"
+
+  - name: gl_cogs_trend
+    tenant: mro
+    domain: General Ledger
+    sentiment: negative
+    grain: Per month; COGS-account activity from monthly GL balances.
+    tables:
+      - mro_distributor.gl_account_balance
+      - mro_distributor.dim_gl_account
+      - mro_distributor.dim_date
+    description: |
+      Monthly cost of goods sold as recorded in the general ledger, from the
+      COGS account's period balances (a debit-balance account, so no sign
+      flip). COGS posts at ship date alongside the inventory relief entry.
+      Finance watches the COGS trend against the revenue trend — COGS growing
+      faster than revenue means margin compression working through the books.
+    formula: |
+      SELECT
+        d.year_num,
+        d.month_num,
+        SUM(b.period_balance) AS gl_cogs
+      FROM mro_distributor.gl_account_balance b
+      JOIN mro_distributor.dim_gl_account a USING (gl_account_key)
+      JOIN mro_distributor.dim_date d ON b.period_date_key = d.date_key
+      WHERE a.account_name = 'COGS'
+      GROUP BY d.year_num, d.month_num
+      ORDER BY d.year_num, d.month_num
+    dimensions_allowed:
+      - dim_date.year_num
+      - dim_date.month_num
+      - dim_date.fiscal_period
+      - dim_subsidiary.subsidiary_name
+    synonyms:
+      - gl cogs
+      - cost of goods sold trend
+      - cogs by month
+      - cost trend per books
+      - monthly cogs
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "Show the monthly COGS trend"
+      - "Is COGS growing faster than revenue?"
+      - "What was COGS per the ledger last quarter?"
+
+  # ── Working Capital / cross-subject-area (2) ──
+
+  - name: cash_conversion_cycle_days
+    tenant: mro
+    domain: Working Capital
+    sentiment: negative
+    grain: Company total; DSO + DIO − DPO over full loaded history.
+    tables:
+      - mro_distributor.ar_payment_application
+      - mro_distributor.inv_balance_snapshot
+      - mro_distributor.o2c_sales_order_line
+      - mro_distributor.p2p_bill_payment
+    description: |
+      The cash conversion cycle — days cash is tied up between paying
+      suppliers and collecting from customers: DSO plus DIO minus DPO,
+      running about 89 days (≈44 + 85 − 39). This is the tenant's headline
+      working-capital metric. It spans three subject areas, so a CCC movement
+      always decomposes into a receivables, inventory, or payables story —
+      ask which component moved.
+    formula: |
+      SELECT dso.v + dio.v - dpo.v AS cash_conversion_cycle_days
+      FROM
+        (SELECT SUM(pa.days_to_pay * pa.amount_applied) / SUM(pa.amount_applied) AS v
+         FROM mro_distributor.ar_payment_application pa) dso,
+        (SELECT
+           (SELECT AVG(daily_value) FROM (
+              SELECT snap.snapshot_date_key, SUM(snap.value_on_hand) AS daily_value
+              FROM mro_distributor.inv_balance_snapshot snap
+              GROUP BY snap.snapshot_date_key))
+           /
+           (SELECT SUM(sol.ext_cost) / COUNT(DISTINCT sol.order_date_key)
+            FROM mro_distributor.o2c_sales_order_line sol) AS v) dio,
+        (SELECT SUM(bp.days_to_pay * bp.amount_paid) / SUM(bp.amount_paid) AS v
+         FROM mro_distributor.p2p_bill_payment bp) dpo
+    dimensions_allowed:
+      - dim_date.year_num
+      - dim_date.quarter_num
+    synonyms:
+      - ccc
+      - cash conversion cycle
+      - cash cycle
+      - working capital cycle
+      - how long is cash tied up
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "What is our cash conversion cycle?"
+      - "How many days is cash tied up in operations?"
+      - "Which component of the cash cycle is worst?"
+
+  - name: supplier_lateness_cash_impact
+    tenant: mro
+    domain: Working Capital
+    sentiment: negative
+    grain: Per supplier reliability tier (A through D), across P2P, INV, O2C, and AR.
+    tables:
+      - mro_distributor.p2p_purchase_order_line
+      - mro_distributor.inv_balance_snapshot
+      - mro_distributor.o2c_fulfillment_line
+      - mro_distributor.ar_invoice
+      - mro_distributor.ar_payment_application
+      - mro_distributor.dim_supplier
+    description: |
+      The end-to-end supplier→cash causal chain, by supplier reliability tier:
+      how supplier lateness (P2P) propagates into stockouts (INV), slower
+      fulfillment (O2C), and days to collect (AR). Because invoices are cut at
+      ship date, tier-D suppliers delay billing itself — the gradient runs
+      from ~0 days late / ~3% stockouts / ~2-day fulfillment for tier A to
+      ~15 days late / ~13% stockouts / ~7-day fulfillment for tier D. This is
+      the tenant's killer diagnostic for "why is cash slow" questions that
+      trace to the supply side. Items map to their single source supplier via
+      distinct item-supplier pairs on PO lines.
+    formula: |
+      WITH item_supplier AS (
+        SELECT DISTINCT po.item_key, po.supplier_key
+        FROM mro_distributor.p2p_purchase_order_line po),
+      p2p AS (
+        SELECT s.reliability_tier AS tier, AVG(po.late_days) AS avg_late_days
+        FROM mro_distributor.p2p_purchase_order_line po
+        JOIN mro_distributor.dim_supplier s USING (supplier_key)
+        GROUP BY s.reliability_tier),
+      inv AS (
+        SELECT s.reliability_tier AS tier,
+               AVG(CASE WHEN snap.is_stockout THEN 100.0 ELSE 0 END)
+                 AS stockout_pct
+        FROM mro_distributor.inv_balance_snapshot snap
+        JOIN item_supplier m USING (item_key)
+        JOIN mro_distributor.dim_supplier s USING (supplier_key)
+        GROUP BY s.reliability_tier),
+      o2c AS (
+        SELECT s.reliability_tier AS tier,
+               AVG(ff.order_to_ship_days) AS avg_order_to_ship_days
+        FROM mro_distributor.o2c_fulfillment_line ff
+        JOIN item_supplier m USING (item_key)
+        JOIN mro_distributor.dim_supplier s USING (supplier_key)
+        GROUP BY s.reliability_tier),
+      ar AS (
+        SELECT s.reliability_tier AS tier,
+               SUM(pa.days_to_pay * pa.amount_applied) / SUM(pa.amount_applied)
+                 AS days_to_collect
+        FROM mro_distributor.ar_invoice i
+        JOIN mro_distributor.o2c_fulfillment_line ff
+          ON i.customer_key = ff.customer_key
+         AND i.invoice_date_key = ff.ship_date_key
+        JOIN item_supplier m ON ff.item_key = m.item_key
+        JOIN mro_distributor.dim_supplier s USING (supplier_key)
+        JOIN mro_distributor.ar_payment_application pa USING (invoice_key)
+        GROUP BY s.reliability_tier)
+      SELECT
+        p2p.tier,
+        p2p.avg_late_days,
+        inv.stockout_pct,
+        o2c.avg_order_to_ship_days,
+        ar.days_to_collect
+      FROM p2p
+      JOIN inv USING (tier)
+      JOIN o2c USING (tier)
+      JOIN ar USING (tier)
+      ORDER BY p2p.tier
+    dimensions_allowed:
+      - dim_supplier.reliability_tier
+      - dim_supplier.supplier_name
+      - dim_item.category
+      - dim_warehouse.warehouse_name
+    synonyms:
+      - supplier cash impact
+      - supplier lateness impact
+      - supply chain cash chain
+      - why is cash slow
+      - supplier reliability impact
+      - late suppliers hurting cash
+    definition_owner: Finance
+    format: days
+    example_questions:
+      - "How does supplier lateness affect our cash?"
+      - "Show the supplier-to-cash impact by reliability tier"
+      - "Are unreliable suppliers slowing our collections?"
