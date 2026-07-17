@@ -2,7 +2,12 @@
  * AskERP — TypeScript Hybrid Retriever (Voyage AI + BM25 + RRF)
  *
  * Serverless-safe: no Python, no native binaries. Embeddings via Voyage AI REST.
- * Corpus: 9 table chunks + 15 metric chunks = 24 docs, embedded once at cold start.
+ * Corpus: schema.yaml tables + metrics.yaml metrics (multi-tenant), embedded once at cold start.
+ * Tenant isolation (D-035): chunk IDs are tenant-prefixed (`mro:dso_days`);
+ *   retrieval filters to one tenant BEFORE ranking — per-tenant BM25 index
+ *   (tenant-local IDF) and per-tenant dense scoring. Default tenant comes from
+ *   ACTIVE_TENANT env var (falls back to 'mro'). App-side tenant switching is
+ *   future work.
  * Dense: Voyage voyage-3-lite cosine similarity
  * Sparse: hand-rolled BM25 Okapi
  * Fusion: Reciprocal Rank Fusion (k=60)
@@ -26,12 +31,14 @@ interface TableColumn {
 
 interface TableDef {
   name: string;
+  tenant?: string;
   description?: string;
   columns?: TableColumn[];
 }
 
 interface MetricDef {
   name: string;
+  tenant?: string;
   domain?: string;
   definition_owner?: string;
   description?: string;
@@ -50,6 +57,7 @@ interface MetricsYaml {
 
 interface Chunk {
   id: string;
+  tenant: string;
   type: "table" | "metric";
   name: string;
   text: string;
@@ -279,9 +287,15 @@ function cosine(a: number[], b: number[]): number {
 
 // ── Module-level state (cached across warm invocations) ────────────────────────
 
-let _chunks: Chunk[] | null = null;
-let _embeddings: number[][] | null = null;
-let _bm25: BM25Index | null = null;
+const DEFAULT_TENANT = process.env.ACTIVE_TENANT ?? "mro";
+
+interface TenantIndex {
+  chunks: Chunk[];
+  embeddings: number[][];
+  bm25: BM25Index;
+}
+
+let _tenants: Map<string, TenantIndex> | null = null;
 let _initPromise: Promise<void> | null = null;
 
 async function initCorpus(): Promise<void> {
@@ -291,40 +305,64 @@ async function initCorpus(): Promise<void> {
   const schema = yaml.load(schemaRaw) as SchemaYaml;
   const metricsConfig = yaml.load(metricsRaw) as MetricsYaml;
 
+  // Tenant-prefixed chunk IDs (D-035): `mro:dso_days`, `northwind:total_revenue`.
   const chunks: Chunk[] = [];
   for (const table of schema.tables ?? []) {
-    chunks.push({ id: `table:${table.name}`, type: "table", name: table.name, text: buildTableText(table) });
+    const tenant = table.tenant ?? "northwind";
+    chunks.push({ id: `${tenant}:${table.name}`, tenant, type: "table", name: table.name, text: buildTableText(table) });
   }
   for (const metric of metricsConfig.metrics ?? []) {
-    chunks.push({ id: `metric:${metric.name}`, type: "metric", name: metric.name, text: buildMetricText(metric) });
+    const tenant = metric.tenant ?? "northwind";
+    chunks.push({ id: `${tenant}:${metric.name}`, tenant, type: "metric", name: metric.name, text: buildMetricText(metric) });
   }
 
-  const texts = chunks.map((c) => c.text);
-  const embeddings = await voyageEmbed(texts, "document");
-  const bm25 = buildBM25(texts);
+  const ids = new Set<string>();
+  for (const c of chunks) {
+    if (ids.has(c.id)) throw new Error(`Duplicate chunk id after tenant prefixing: ${c.id}`);
+    ids.add(c.id);
+  }
 
-  _chunks = chunks;
-  _embeddings = embeddings;
-  _bm25 = bm25;
+  // Embed the full corpus in one call, then partition per tenant so ranking
+  // (dense scoring AND BM25 with tenant-local IDF) only ever sees one tenant.
+  const embeddings = await voyageEmbed(chunks.map((c) => c.text), "document");
+
+  const tenants = new Map<string, TenantIndex>();
+  for (const tenant of Array.from(new Set(chunks.map((c) => c.tenant)))) {
+    const idxs = chunks.map((c, i) => ({ c, i })).filter((x) => x.c.tenant === tenant);
+    const tChunks = idxs.map((x) => x.c);
+    tenants.set(tenant, {
+      chunks: tChunks,
+      embeddings: idxs.map((x) => embeddings[x.i]),
+      bm25: buildBM25(tChunks.map((c) => c.text)),
+    });
+  }
+  _tenants = tenants;
 }
 
 async function ensureInit(): Promise<void> {
-  if (_chunks !== null) return;
+  if (_tenants !== null) return;
   if (!_initPromise) _initPromise = initCorpus();
   await _initPromise;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-export async function retrieve(query: string, k = 5): Promise<RetrieveResponse> {
+export async function retrieve(query: string, k = 5, tenant?: string): Promise<RetrieveResponse> {
   if (!query.trim()) {
     return { results: [], confidence: computeConfidence([]) };
   }
 
   await ensureInit();
-  const chunks = _chunks!;
-  const corpusEmbs = _embeddings!;
-  const bm25 = _bm25!;
+  const activeTenant = tenant ?? DEFAULT_TENANT;
+  const index = _tenants!.get(activeTenant);
+  if (!index) {
+    throw new Error(
+      `Unknown tenant '${activeTenant}' — known tenants: ${Array.from(_tenants!.keys()).join(", ")}`
+    );
+  }
+  const chunks = index.chunks;
+  const corpusEmbs = index.embeddings;
+  const bm25 = index.bm25;
 
   // Dense retrieval
   const [queryEmb] = await voyageEmbed([query], "query");
