@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 // TEMPORARY — D-037 deploy diagnostics. Booleans and non-secret config only,
 // never a token value. Delete once the MOTHERDUCK_TOKEN visibility issue is resolved.
+// force-dynamic: this route has no request-derived data, so Next.js statically
+// optimized (and Vercel's edge cached) it — every hit was serving a frozen
+// response from first build instead of re-reading process.env per request.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return NextResponse.json({
     motherduck_token_present: Boolean(process.env.MOTHERDUCK_TOKEN),
