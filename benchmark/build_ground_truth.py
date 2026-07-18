@@ -206,7 +206,7 @@ GT = {
         JOIN item_so so USING (item_key)
         JOIN item_otif ot USING (item_key)
         WHERE p.late > 5 AND ot.otif < 50
-        ORDER BY so.so_pct DESC LIMIT 10"""},
+        ORDER BY so.so_pct DESC, s.supplier_key, i.sku LIMIT 10"""},
     "H09": {"sanity": "delta ~5 days (D ots ~7.0 vs A ots ~2.0)", "sql": f"""
         WITH item_supplier AS (SELECT DISTINCT item_key, supplier_key FROM {S}.p2p_purchase_order_line),
         tier_ots AS (

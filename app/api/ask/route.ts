@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       rows: execResult.rows,
       row_count: execResult.row_count,
       truncated: execResult.truncated,
-    });
+    }, DEFAULT_TENANT);
     narrateTimeMs = Date.now() - t;
     headline = n.headline;
     narrative = n.narrative;

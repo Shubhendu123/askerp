@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { AskResponse } from "./Workbench";
+import { formatTitle, formatDuration } from "@/lib/format";
 
 interface Props {
   response: AskResponse | null;
@@ -117,7 +118,7 @@ function DataTable({
                   textAlign: isNumeric(ci) ? "right" : "left",
                 }}
               >
-                {col.replace(/_/g, " ")}
+                {formatTitle(col)}
               </th>
             ))}
           </tr>
@@ -179,7 +180,7 @@ function StatDisplay({
         {value}
       </p>
       <p className="mt-2 text-[12px]" style={{ color: "var(--text-tertiary)" }}>
-        {label.replace(/_/g, " ")}
+        {formatTitle(label)}
       </p>
     </div>
   );
@@ -257,7 +258,7 @@ export default function ChangeTab({ response, loading }: Props) {
             {response?.error && (
               <InsightItem
                 dotColor="var(--sentiment-negative)"
-                boldText={response.error.replace(/_/g, " ")}
+                boldText={formatTitle(response.error)}
                 boldColor="var(--sentiment-negative)"
                 rest={response.detail ?? ""}
               />
@@ -278,7 +279,7 @@ export default function ChangeTab({ response, loading }: Props) {
                     dotColor={sentimentColor(response.sentiment)}
                     boldText={primaryValue(response)}
                     boldColor={sentimentColor(response.sentiment)}
-                    rest={`in ${(response.metric_used ?? response.columns?.[0] ?? "result").replace(/_/g, " ")}`}
+                    rest={`in ${formatTitle(response.metric_used ?? response.columns?.[0] ?? "result")}`}
                   />
                 )}
 
@@ -294,11 +295,11 @@ export default function ChangeTab({ response, loading }: Props) {
                   className="text-[10px] mt-3 pt-3"
                   style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border)" }}
                 >
-                  {response.metric_used?.replace(/_/g, " ") ?? "—"}
+                  {response.metric_used ? formatTitle(response.metric_used) : "—"}
                   {" · "}
                   {response.row_count} row{response.row_count === 1 ? "" : "s"}
                   {" · "}
-                  {Math.round(response.total_time_ms ?? 0)}ms
+                  {formatDuration(response.total_time_ms)}
                 </p>
               </>
             )}
@@ -395,11 +396,11 @@ export default function ChangeTab({ response, loading }: Props) {
             {response.sql}
           </pre>
           <p className="mt-2 text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-            Retrieval {Math.round(response.retrieval_time_ms ?? 0)}ms ·
-            SQL gen {Math.round(response.sql_gen_time_ms ?? 0)}ms ·
-            Exec {Math.round(response.execution_time_ms ?? 0)}ms ·
-            Narrate {Math.round((response as { narrate_time_ms?: number }).narrate_time_ms ?? 0)}ms ·
-            Total {Math.round(response.total_time_ms ?? 0)}ms
+            Retrieval {formatDuration(response.retrieval_time_ms)} ·
+            SQL gen {formatDuration(response.sql_gen_time_ms)} ·
+            Exec {formatDuration(response.execution_time_ms)} ·
+            Narrate {formatDuration((response as { narrate_time_ms?: number }).narrate_time_ms)} ·
+            Total {formatDuration(response.total_time_ms)}
           </p>
         </div>
       )}
@@ -439,7 +440,7 @@ export default function ChangeTab({ response, loading }: Props) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>
-                    {r.name.replace(/_/g, " ")}
+                    {formatTitle(r.name)}
                     <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--text-tertiary)" }}>
                       score {r.score.toFixed(4)}
                     </span>

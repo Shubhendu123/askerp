@@ -1,5 +1,7 @@
 # AskERP Retrieval Benchmark — REPORT (D-036)
 
+> **Historical record.** Entity names below (e.g. "Supplier 097", "Customer 059") reflect the pre-D-038 placeholder naming scheme and are frozen as generated on 2026-07-17 — not updated to the realistic names introduced by D-038. Numeric results, scores, and findings are unaffected (D-038 only touched name columns).
+
 Generated 2026-07-17 from `benchmark/results.jsonl` (160 runs). Model: `claude-haiku-4-5-20251001` for all modes. Tenant: mro (46-doc corpus: 20 tables + 26 metrics). Retrieval top-k: 5.
 
 Modes: `bm25` (BM25 only), `dense` (Voyage dense only), `rrf` (production hybrid), `schema` (no retrieval; full tenant corpus in prompt — R-score N/A, context size counted instead).

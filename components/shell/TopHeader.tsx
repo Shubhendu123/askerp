@@ -1,4 +1,7 @@
+import { getActiveTenantConfig } from "@/lib/tenants";
+
 export default function TopHeader() {
+  const tenant = getActiveTenantConfig();
   return (
     <header
       className="flex items-center justify-between gap-4"
@@ -36,7 +39,7 @@ export default function TopHeader() {
             color: "var(--text-secondary)",
           }}
         >
-          Northwind Furniture ERP
+          {tenant.headerPill}
         </span>
       </div>
 

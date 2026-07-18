@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Database } from "lucide-react";
 import type { WarehouseStats } from "@/app/api/warehouse-stats/route";
+import { getTenantConfig, type TenantConfig } from "@/lib/tenants";
 
 type State =
   | { status: "loading" }
@@ -38,7 +39,11 @@ function StatSkeleton() {
   );
 }
 
-export default function DataOverviewCard() {
+interface Props {
+  tenant?: TenantConfig;
+}
+
+export default function DataOverviewCard({ tenant = getTenantConfig("mro") }: Props) {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
@@ -77,7 +82,7 @@ export default function DataOverviewCard() {
           className="font-medium leading-none flex-1"
           style={{ fontSize: 13, color: "var(--text-primary)" }}
         >
-          Northwind Furniture warehouse
+          {tenant.warehouseLabel}
         </p>
         {state.status === "error" ? (
           <span
@@ -143,7 +148,7 @@ export default function DataOverviewCard() {
           >
             <p style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
               {data
-                ? `Last refreshed ${data.last_refreshed} · ${data.schema_type}`
+                ? `Data as of ${data.last_refreshed} · ${data.schema_type}`
                 : "Loading warehouse metadata…"}
             </p>
           </div>

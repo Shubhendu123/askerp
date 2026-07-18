@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import * as yaml from "js-yaml";
 import type { RetrievalResult } from "./retrieval/retriever";
+import { getTenantConfig } from "./tenants";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -32,7 +33,7 @@ function tenantMetricsYaml(tenant: string): string {
   return yaml.dump({ metrics: parsedMetrics.metrics.filter((m) => m.tenant === tenant) });
 }
 
-const SYSTEM_BASE_NORTHWIND = `You are a SQL generator for a DuckDB analytics warehouse for Northwind Furniture, a ~$50M B2B furniture company.`;
+const SYSTEM_BASE_NORTHWIND = `You are a SQL generator for a DuckDB analytics warehouse for ${getTenantConfig("northwind").llmDescriptor}.`;
 
 const SYSTEM_RULES_NORTHWIND = `
 RULES:
@@ -65,7 +66,7 @@ Output ONLY this JSON object — no markdown, no explanation:
 // "mro_distributor" inside the MotherDuck database "askerp" (also present in
 // the local file at data/northwind.db). System/rules mirror the benchmark's
 // proven prompt (D-036: dense retrieval + this shape scored best on H-tier).
-const SYSTEM_BASE_MRO = `You are a SQL generator for a DuckDB analytics warehouse for the MRO Distributor tenant (an industrial supplies distributor). All warehouse tables live in the schema "mro_distributor" — always qualify table names as mro_distributor.<table>.`;
+const SYSTEM_BASE_MRO = `You are a SQL generator for a DuckDB analytics warehouse for ${getTenantConfig("mro").llmDescriptor}. All warehouse tables live in the schema "mro_distributor" — always qualify table names as mro_distributor.<table>.`;
 
 const SYSTEM_RULES_MRO = `
 RULES:

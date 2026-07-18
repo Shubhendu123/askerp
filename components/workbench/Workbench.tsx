@@ -8,6 +8,7 @@ import ChangeTab from "./ChangeTab";
 import ContributionTab from "./ContributionTab";
 import DataOverviewCard from "./DataOverviewCard";
 import { canContribute } from "@/lib/chartUtils";
+import { getTenantConfig, type TenantConfig } from "@/lib/tenants";
 
 export interface AskResponse {
   question: string;
@@ -54,7 +55,11 @@ function relativeTime(ts: number): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
-export default function Workbench() {
+interface WorkbenchProps {
+  tenant?: TenantConfig;
+}
+
+export default function Workbench({ tenant = getTenantConfig("mro") }: WorkbenchProps) {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeQuestion, setActiveQuestion] = useState<string | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
@@ -135,7 +140,7 @@ export default function Workbench() {
               ask(input);
             }
           }}
-          placeholder="Ask anything about Northwind Furniture — revenue, margins, customers…"
+          placeholder={tenant.searchPlaceholder}
           disabled={loading}
           rows={1}
           className="input-glow flex-1 resize-none text-sm leading-snug transition-all disabled:opacity-50"
@@ -209,7 +214,7 @@ export default function Workbench() {
           {/* Connected data source */}
           <div>
             <p className="label-caps mb-2">Connected data source</p>
-            <DataOverviewCard />
+            <DataOverviewCard tenant={tenant} />
           </div>
 
           {/* Recent analyses */}
@@ -295,7 +300,7 @@ export default function Workbench() {
               <ArrowLeft size={14} />
               Back to overview
             </button>
-            <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} />
+            <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} tenant={tenant} />
             <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
             {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
             {safeTab === "contribution" && response && <ContributionTab response={response} />}

@@ -1,11 +1,14 @@
 "use client";
 
 import type { AskResponse } from "./Workbench";
+import { getTenantConfig, type TenantConfig } from "@/lib/tenants";
+import { formatTitle, formatDuration } from "@/lib/format";
 
 interface Props {
   response: AskResponse | null;
   loading: boolean;
   activeQuestion: string | null;
+  tenant?: TenantConfig;
 }
 
 function formatNumber(v: unknown): string {
@@ -23,7 +26,7 @@ function primaryValue(response: AskResponse): string {
   return formatNumber((response.rows[0] as unknown[])[0]);
 }
 
-export default function AnalysisHeader({ response, loading, activeQuestion }: Props) {
+export default function AnalysisHeader({ response, loading, activeQuestion, tenant = getTenantConfig("mro") }: Props) {
   if (!activeQuestion && !loading) return null;
 
   const isSingleStat =
@@ -41,7 +44,7 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
       }}
     >
       <div className="flex-1 min-w-0">
-        <p className="label-caps mb-1.5">Analysis · Northwind Furniture</p>
+        <p className="label-caps mb-1.5">{tenant.analysisLabel}</p>
 
         {loading && !response ? (
           <div className="space-y-2">
@@ -51,18 +54,18 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
         ) : (
           <>
             <h2
-              className="leading-tight truncate capitalize"
+              className="leading-tight truncate"
               style={{ fontSize: 18, fontWeight: 500, color: "var(--text-primary)" }}
             >
               {response?.metric_used
-                ? response.metric_used.replace(/_/g, " ")
+                ? formatTitle(response.metric_used)
                 : activeQuestion}
             </h2>
             <p className="mt-1" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
               {response?.error
                 ? "Error generating analysis"
                 : response
-                ? `${response.row_count ?? 0} row${response.row_count === 1 ? "" : "s"} · ${Math.round(response.total_time_ms ?? 0)}ms · just now`
+                ? `${response.row_count ?? 0} row${response.row_count === 1 ? "" : "s"} · ${formatDuration(response.total_time_ms)} · just now`
                 : activeQuestion}
             </p>
           </>
@@ -78,7 +81,7 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
           >
             {primaryValue(response!)}
           </p>
-          <p className="mt-1.5 label-caps">{response!.columns[0].replace(/_/g, " ")}</p>
+          <p className="mt-1.5 label-caps">{formatTitle(response!.columns[0])}</p>
         </div>
       )}
 
@@ -95,7 +98,7 @@ export default function AnalysisHeader({ response, loading, activeQuestion }: Pr
             border: "1px solid var(--sentiment-negative)",
           }}
         >
-          {response.error.replace(/_/g, " ")}
+          {formatTitle(response.error)}
         </div>
       )}
     </div>

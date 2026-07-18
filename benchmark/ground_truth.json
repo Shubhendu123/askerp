@@ -10,37 +10,38 @@
   ],
   "result": [
    [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     "D",
     15.1,
     15096513.54
    ],
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     15.2,
     12394340.05
    ],
    [
-    "Supplier 073",
+    "Schwarzwald Industriebedarf GmbH",
     "C",
     7.3,
     8062443.96
    ],
    [
-    "Supplier 065",
+    "Bayou Equipment Supply",
     "C",
     7.0,
     5599973.58
    ],
    [
-    "Supplier 056",
+    "Allegheny Welding Supply",
     "C",
     7.3,
     5258937.61
    ]
   ],
-  "sanity_note": "top suppliers must be tier C/D"
+  "sanity_note": "top suppliers must be tier C/D",
+  "renamed_d038": true
  },
  "H02": {
   "question": "Explain whether our CCC problem is driven more by slow customers, excess inventory, or supplier payment timing.",
@@ -76,97 +77,98 @@
   ],
   "result": [
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     15.2,
     32.5
    ],
    [
-    "Supplier 032",
+    "Rockies Welding Ltd.",
     "D",
     13.9,
     31.8
    ],
    [
-    "Supplier 037",
+    "Vasteras Verktyg AB",
     "C",
     7.9,
     33.3
    ],
    [
-    "Supplier 062",
+    "Berkshire Welding Corp.",
     "C",
     7.7,
     29.2
    ],
    [
-    "Supplier 013",
+    "Kaohsiung Precision Components",
     "C",
     7.7,
     31.0
    ],
    [
-    "Supplier 073",
+    "Schwarzwald Industriebedarf GmbH",
     "C",
     7.3,
     32.7
    ],
    [
-    "Supplier 057",
+    "Peachtree Equipment Ltd.",
     "C",
     6.7,
     30.6
    ],
    [
-    "Supplier 088",
+    "Tidewater Tool Inc.",
     "C",
     6.6,
     32.5
    ],
    [
-    "Supplier 055",
+    "Mojave Hardware Corp.",
     "C",
     5.7,
     31.5
    ],
    [
-    "Supplier 005",
+    "Pacific Rim Machine Works Inc.",
     "B",
     2.7,
     35.0
    ],
    [
-    "Supplier 090",
+    "Delta Industrial Corp.",
     "B",
     2.4,
     31.2
    ],
    [
-    "Supplier 019",
+    "Bay State Safety Products Corp.",
     "B",
     2.2,
     30.5
    ],
    [
-    "Supplier 043",
+    "Yankee Welding Group",
     "B",
     2.2,
     28.6
    ],
    [
-    "Supplier 085",
+    "Cornbelt Cutting Tools Supply",
     "B",
     2.2,
     29.5
    ],
    [
-    "Supplier 089",
+    "Highdesert Hardware Group",
     "B",
     2.2,
     30.9
    ]
   ],
-  "sanity_note": "listed suppliers are late (above-avg) yet paid faster than the 39d weighted average"
+  "sanity_note": "listed suppliers are late (above-avg) yet paid faster than the 39d weighted average",
+  "renamed_d038": true
  },
  "H04": {
   "question": "Which item categories create the worst combination of high DIO and high stockout rate?",
@@ -283,71 +285,72 @@
   ],
   "result": [
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     15.2,
     7.0
    ],
    [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     "D",
     15.1,
     7.0
    ],
    [
-    "Supplier 040",
+    "Piney Woods Abrasives Supply",
     "D",
     14.5,
     7.0
    ],
    [
-    "Supplier 084",
+    "Delta Equipment Group",
     "D",
     14.8,
     6.9
    ],
    [
-    "Supplier 003",
+    "Taichung Precision Hardware",
     "D",
     16.2,
     6.9
    ],
    [
-    "Supplier 032",
+    "Rockies Welding Ltd.",
     "D",
     13.9,
     6.9
    ],
    [
-    "Supplier 072",
+    "Palmetto Bearing & Belt Co.",
     "D",
     14.3,
     6.8
    ],
    [
-    "Supplier 037",
+    "Vasteras Verktyg AB",
     "C",
     7.9,
     4.4
    ],
    [
-    "Supplier 056",
+    "Allegheny Welding Supply",
     "C",
     7.3,
     4.2
    ],
    [
-    "Supplier 052",
+    "Piney Woods Electrical Group",
     "C",
     7.5,
     4.2
    ]
   ],
-  "sanity_note": "top suppliers must be tier C/D with elevated order-to-ship"
+  "sanity_note": "top suppliers must be tier C/D with elevated order-to-ship",
+  "renamed_d038": true
  },
  "H08": {
   "question": "Show the top supplier-item pairs where late procurement caused stockouts and poor OTIF.",
-  "sql": "WITH pairs AS (SELECT supplier_key, item_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1,2),\n        item_so AS (SELECT item_key, AVG(CASE WHEN is_stockout THEN 100.0 ELSE 0 END) so_pct FROM mro_distributor.inv_balance_snapshot GROUP BY 1),\n        item_otif AS (\n          SELECT sol.item_key,\n                 COUNT(CASE WHEN ff.ship_date_key IS NOT NULL AND ff.ship_date_key <= sol.promised_ship_date_key\n                             AND ff.qty_shipped >= sol.qty_ordered THEN 1 END)*100.0/COUNT(*) otif\n          FROM mro_distributor.o2c_sales_order_line sol LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key) GROUP BY 1)\n        SELECT s.supplier_name, s.reliability_tier, i.sku, ROUND(p.late,1) AS avg_late_days,\n               ROUND(so.so_pct,1) AS stockout_pct, ROUND(ot.otif,1) AS otif_pct\n        FROM pairs p\n        JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        JOIN mro_distributor.dim_item i USING (item_key)\n        JOIN item_so so USING (item_key)\n        JOIN item_otif ot USING (item_key)\n        WHERE p.late > 5 AND ot.otif < 50\n        ORDER BY so.so_pct DESC LIMIT 10",
+  "sql": "WITH pairs AS (SELECT supplier_key, item_key, AVG(late_days) late FROM mro_distributor.p2p_purchase_order_line GROUP BY 1,2),\n        item_so AS (SELECT item_key, AVG(CASE WHEN is_stockout THEN 100.0 ELSE 0 END) so_pct FROM mro_distributor.inv_balance_snapshot GROUP BY 1),\n        item_otif AS (\n          SELECT sol.item_key,\n                 COUNT(CASE WHEN ff.ship_date_key IS NOT NULL AND ff.ship_date_key <= sol.promised_ship_date_key\n                             AND ff.qty_shipped >= sol.qty_ordered THEN 1 END)*100.0/COUNT(*) otif\n          FROM mro_distributor.o2c_sales_order_line sol LEFT JOIN mro_distributor.o2c_fulfillment_line ff USING (so_line_key) GROUP BY 1)\n        SELECT s.supplier_name, s.reliability_tier, i.sku, ROUND(p.late,1) AS avg_late_days,\n               ROUND(so.so_pct,1) AS stockout_pct, ROUND(ot.otif,1) AS otif_pct\n        FROM pairs p\n        JOIN mro_distributor.dim_supplier s USING (supplier_key)\n        JOIN mro_distributor.dim_item i USING (item_key)\n        JOIN item_so so USING (item_key)\n        JOIN item_otif ot USING (item_key)\n        WHERE p.late > 5 AND ot.otif < 50\n        ORDER BY so.so_pct DESC, s.supplier_key, i.sku LIMIT 10",
   "columns": [
    "supplier_name",
    "reliability_tier",
@@ -358,7 +361,7 @@
   ],
   "result": [
    [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     "D",
     "SKU-00768",
     16.8,
@@ -366,7 +369,7 @@
     0.0
    ],
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     "SKU-00247",
     13.9,
@@ -374,15 +377,7 @@
     3.4
    ],
    [
-    "Supplier 097",
-    "D",
-    "SKU-00649",
-    10.2,
-    15.2,
-    4.3
-   ],
-   [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     "D",
     "SKU-00721",
     15.7,
@@ -390,15 +385,15 @@
     4.5
    ],
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
-    "SKU-00411",
-    13.5,
-    14.8,
-    12.8
+    "SKU-00649",
+    10.2,
+    15.2,
+    4.3
    ],
    [
-    "Supplier 003",
+    "Taichung Precision Hardware",
     "D",
     "SKU-00246",
     16.3,
@@ -406,23 +401,15 @@
     2.4
    ],
    [
-    "Supplier 003",
+    "Lonestar Electrical Ltd.",
     "D",
-    "SKU-00983",
-    15.9,
-    14.6,
-    9.9
+    "SKU-00411",
+    13.5,
+    14.8,
+    12.8
    ],
    [
-    "Supplier 066",
-    "D",
-    "SKU-00657",
-    14.4,
-    14.6,
-    2.0
-   ],
-   [
-    "Supplier 003",
+    "Taichung Precision Hardware",
     "D",
     "SKU-00918",
     14.8,
@@ -430,15 +417,33 @@
     9.4
    ],
    [
-    "Supplier 066",
+    "Taichung Precision Hardware",
     "D",
-    "SKU-01151",
-    21.5,
+    "SKU-00983",
+    15.9,
     14.6,
-    9.4
+    9.9
+   ],
+   [
+    "Rockies Welding Ltd.",
+    "D",
+    "SKU-01108",
+    13.0,
+    14.6,
+    5.6
+   ],
+   [
+    "Piney Woods Welding Ltd.",
+    "D",
+    "SKU-00657",
+    14.4,
+    14.6,
+    2.0
    ]
   ],
-  "sanity_note": "top pairs must be tier C/D sourced"
+  "sanity_note": "top pairs must be tier C/D sourced",
+  "note": "D-038: added ORDER BY tiebreaker (supplier_key, sku) \u2014 original query had unstable row order among tied so_pct values, unrelated to the name patch.",
+  "renamed_d038": true
  },
  "H09": {
   "question": "If we replaced our tier-D suppliers, how much order-to-ship delay would we eliminate on affected SKUs?",
@@ -469,7 +474,7 @@
   "result": [
    [
     "SKU-00057",
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     "D",
     15.6,
     10103228.1,
@@ -477,7 +482,7 @@
    ],
    [
     "SKU-00093",
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     13.9,
     4829342.5,
@@ -485,7 +490,7 @@
    ],
    [
     "SKU-00919",
-    "Supplier 073",
+    "Schwarzwald Industriebedarf GmbH",
     "C",
     7.3,
     8062443.96,
@@ -493,7 +498,7 @@
    ],
    [
     "SKU-00124",
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     16.8,
     2293695.45,
@@ -501,7 +506,7 @@
    ],
    [
     "SKU-00638",
-    "Supplier 084",
+    "Delta Equipment Group",
     "D",
     17.3,
     1910810.79,
@@ -509,7 +514,7 @@
    ],
    [
     "SKU-00687",
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     17.3,
     2031733.86,
@@ -517,7 +522,7 @@
    ],
    [
     "SKU-00441",
-    "Supplier 040",
+    "Piney Woods Abrasives Supply",
     "D",
     17.9,
     1381085.55,
@@ -525,7 +530,7 @@
    ],
    [
     "SKU-01108",
-    "Supplier 032",
+    "Rockies Welding Ltd.",
     "D",
     13.0,
     1198594.0,
@@ -533,7 +538,7 @@
    ],
    [
     "SKU-01033",
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     "D",
     14.8,
     998888.52,
@@ -541,14 +546,15 @@
    ],
    [
     "SKU-00546",
-    "Supplier 003",
+    "Taichung Precision Hardware",
     "D",
     16.7,
     906935.92,
     12.8
    ]
   ],
-  "sanity_note": "top items must be tier C/D sourced"
+  "sanity_note": "top items must be tier C/D sourced",
+  "renamed_d038": true
  },
  "H11": {
   "question": "Compare fast-moving versus slow-moving items: which group suffers more from supplier lateness?",
@@ -605,67 +611,68 @@
   ],
   "result": [
    [
-    "Customer 192",
+    "Westbrook Property Services",
     16.9,
     2.67,
     15920114.75
    ],
    [
-    "Customer 059",
+    "Cornerstone Site Services",
     17.3,
     2.67,
     8957172.29
    ],
    [
-    "Customer 049",
+    "Fairview Facilities Management",
     15.2,
     2.66,
     8648704.17
    ],
    [
-    "Customer 106",
+    "Titan Assembly Works Group",
     14.8,
     2.66,
     8616970.32
    ],
    [
-    "Customer 128",
+    "Parkside Maintenance Group",
     15.7,
     2.73,
     8029509.82
    ],
    [
-    "Customer 090",
+    "Cornerstone Manufacturing Inc.",
     15.3,
     2.73,
     6962731.32
    ],
    [
-    "Customer 129",
+    "Summit Assembly Works Inc.",
     14.6,
     2.68,
     6806241.72
    ],
    [
-    "Customer 058",
+    "Oakhurst Property Services",
     17.7,
     2.71,
     6267507.01
    ],
    [
-    "Customer 169",
+    "Granite Builders Group",
     17.4,
     2.72,
     6206029.51
    ],
    [
-    "Customer 145",
+    "Summit Industrial Products Corp.",
     15.2,
     2.67,
     4428249.01
    ]
   ],
-  "sanity_note": "listed customers have above-average C/D revenue share AND above-average fulfillment days"
+  "sanity_note": "listed customers have above-average C/D revenue share AND above-average fulfillment days",
+  "renamed_d038": true
  },
  "H14": {
   "question": "Break down our OTIF misses: what share is late-only, short-only, or both, and which suppliers sit behind the late portion?",
@@ -829,26 +836,27 @@
   ],
   "result": [
    [
-    "Supplier 003",
+    "Taichung Precision Hardware",
     16.17
    ],
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     15.24
    ],
    [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     15.1
    ],
    [
-    "Supplier 084",
+    "Delta Equipment Group",
     14.82
    ],
    [
-    "Supplier 040",
+    "Piney Woods Abrasives Supply",
     14.51
    ]
-  ]
+  ],
+  "renamed_d038": true
  },
  "M04": {
   "question": "What is on-time delivery rate by supplier reliability tier?",
@@ -963,46 +971,47 @@
   ],
   "result": [
    [
-    "Supplier 021",
+    "Guangzhou Precision Components",
     69129229.98
    ],
    [
-    "Supplier 093",
+    "Gulf Plains Safety Products Ltd.",
     22010450.43
    ],
    [
-    "Supplier 074",
+    "Rheinland Industriebedarf GmbH",
     12374405.06
    ],
    [
-    "Supplier 018",
+    "Empire State Abrasives Corp.",
     8747178.56
    ],
    [
-    "Supplier 014",
+    "Prairie Fastener Co.",
     8298540.86
    ],
    [
-    "Supplier 010",
+    "Nordsee Maschinenbau GmbH",
     8046581.4
    ],
    [
-    "Supplier 066",
+    "Piney Woods Welding Ltd.",
     7856161.88
    ],
    [
-    "Supplier 097",
+    "Lonestar Electrical Ltd.",
     6360459.69
    ],
    [
-    "Supplier 063",
+    "Cascade Welding Supply",
     6332372.31
    ],
    [
-    "Supplier 019",
+    "Bay State Safety Products Corp.",
     6277666.01
    ]
-  ]
+  ],
+  "renamed_d038": true
  },
  "M09": {
   "question": "How has monthly COGS trended over the last 12 months?",

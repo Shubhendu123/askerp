@@ -1,15 +1,17 @@
 import AppShell from "@/components/shell/AppShell";
 import Workbench from "@/components/workbench/Workbench";
+import { getActiveTenantConfig } from "@/lib/tenants";
 
 export const metadata = {
   title: "AskERP — Workbench",
-  description: "Conversational analytics for Northwind Furniture",
+  description: getActiveTenantConfig().metaDescription,
 };
 
 export default function ChatPage() {
+  const tenant = getActiveTenantConfig();
   return (
     <AppShell>
-      <Workbench />
+      <Workbench tenant={tenant} />
     </AppShell>
   );
 }

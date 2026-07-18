@@ -11,8 +11,12 @@ DDL must be applied first: db_rebuild/ddl/mro_distributor.sql
 """
 import duckdb, numpy as np, pandas as pd
 from datetime import date, timedelta
+from realism_names import build_supplier_names, build_customer_names, build_employee_names
 
 SEED=42; rng=np.random.default_rng(SEED)
+# D-038: dedicated stream for entity names — never touches `rng`, so every
+# other generated column stays byte-identical to pre-D-038 generations.
+rng_names=np.random.default_rng(SEED); _used_names=set()
 N_ITEMS,N_CUST,N_SUPP,N_WH = 1200,200,100,4
 START,MONTHS = date(2024,7,1),18
 DAYS=MONTHS*30; dates=[START+timedelta(days=i) for i in range(DAYS)]
@@ -86,9 +90,12 @@ ct=[terms[i] for i in rng.choice(3,N_CUST,p=[0.55,0.30,0.15])]
 cust_size=rng.lognormal(0,1.1,N_CUST); cust_size/=cust_size.sum()   # revenue concentration
 # 15% chronic slow payers: pay terms + ~20d; rest terms + ~4d
 slow=rng.random(N_CUST)<0.15
+seg_arr=rng.choice(segs,N_CUST,p=[0.4,0.25,0.25,0.10])   # unchanged position/order in the rng stream
+reg_arr=rng.choice(regions,N_CUST)                        # unchanged position/order in the rng stream
+cust_names=build_customer_names(seg_arr,rng_names,_used_names)   # D-038, separate stream
 cust=pd.DataFrame({"customer_key":np.arange(1,N_CUST+1),
-  "customer_name":[f"Customer {i:03d}" for i in range(1,N_CUST+1)],
-  "segment":rng.choice(segs,N_CUST,p=[0.4,0.25,0.25,0.10]),"region":rng.choice(regions,N_CUST),
+  "customer_name":cust_names,
+  "segment":seg_arr,"region":reg_arr,
   "credit_terms":[t[0] for t in ct],"credit_days":[t[1] for t in ct]})
 load("dim_customer",cust)
 cust_days=dict(zip(cust.customer_key,cust.credit_days))
@@ -97,11 +104,14 @@ cust_days=dict(zip(cust.customer_key,cust.credit_days))
 tier=rng.choice(list("ABCD"),N_SUPP,p=[0.45,0.40,0.10,0.05])
 sterms=[terms[i] for i in rng.choice(3,N_SUPP,p=[0.5,0.3,0.2])]
 supp_size=rng.lognormal(0,1.3,N_SUPP); supp_size/=supp_size.sum()   # strategic vs tail
+supp_region_arr=rng.choice(regions+["Import-APAC","Import-EU"],N_SUPP)   # unchanged position in the rng stream
+supp_names=build_supplier_names(supp_region_arr,rng_names,_used_names)   # D-038, separate stream
+supp_lead_arr=rng.choice([7,14,21,30],N_SUPP,p=[0.3,0.4,0.2,0.1])        # unchanged position in the rng stream
 supp=pd.DataFrame({"supplier_key":np.arange(1,N_SUPP+1),
-  "supplier_name":[f"Supplier {i:03d}" for i in range(1,N_SUPP+1)],
-  "region":rng.choice(regions+["Import-APAC","Import-EU"],N_SUPP),
+  "supplier_name":supp_names,
+  "region":supp_region_arr,
   "payment_terms":[t[0] for t in sterms],"payment_days":[t[1] for t in sterms],
-  "promised_lead_days":rng.choice([7,14,21,30],N_SUPP,p=[0.3,0.4,0.2,0.1]),
+  "promised_lead_days":supp_lead_arr,
   "reliability_tier":tier})
 load("dim_supplier",supp)
 supp_tier=dict(zip(supp.supplier_key,supp.reliability_tier))
@@ -122,9 +132,11 @@ load("dim_gl_account",pd.DataFrame({"gl_account_key":[1,2,3,4,5,6,7,8],
   "statement":["P&L","P&L","BS","BS","BS","P&L","BS","BS"],
   "rollup":["Income","Income","Current Assets","Current Liab","Current Assets","Income","Current Assets","Equity"]}))
 n_emp=30
+emp_region_arr=list(rng.choice(regions,n_emp))   # unchanged position in the rng stream
+emp_names=build_employee_names(n_emp,rng_names,_used_names)   # D-038, separate stream
 emp=pd.DataFrame({"employee_key":np.arange(1,n_emp+1),
-  "employee_name":[f"Employee {i:02d}" for i in range(1,n_emp+1)],
-  "role":["Sales Rep"]*20+["Buyer"]*10,"region":list(rng.choice(regions,n_emp))})
+  "employee_name":emp_names,
+  "role":["Sales Rep"]*20+["Buyer"]*10,"region":emp_region_arr})
 load("dim_employee",emp)
 sales_reps=emp[emp.role=="Sales Rep"].employee_key.values
 buyers=emp[emp.role=="Buyer"].employee_key.values

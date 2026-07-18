@@ -11,6 +11,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { prepTrend } from "@/lib/chartUtils";
+import { formatTitle } from "@/lib/format";
 import type { AskResponse } from "./Workbench";
 
 interface Props {
@@ -50,7 +51,7 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="font-medium mb-1">{label}</p>
       {payload.map((p: { name: string; value: number; color: string }) => (
         <p key={p.name} style={{ color: p.color }}>
-          {p.name.replace(/_/g, " ")}: {fmt(p.value)}
+          {formatTitle(p.name)}: {fmt(p.value)}
         </p>
       ))}
     </div>
@@ -63,7 +64,7 @@ export default function TrendTab({ response }: Props) {
 
   const color = sentimentColor(response.sentiment);
   const useLine = isDateSeries(data[0]?.colName ?? "");
-  const colLabel = data[0]?.colName.replace(/_/g, " ") ?? "value";
+  const colLabel = data[0]?.colName ? formatTitle(data[0].colName) : "value";
 
   // Determine y-axis tick format
   const maxVal = Math.max(...data.map((d) => d.value));
