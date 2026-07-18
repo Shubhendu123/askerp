@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateSQL, USE_RETRIEVAL } from "@/lib/sqlGenerator";
+import { generateSQL, USE_RETRIEVAL, DEFAULT_TENANT } from "@/lib/sqlGenerator";
 import { narrate } from "@/lib/narrator";
 import { executeSQL } from "@/lib/db";
-import { retrieve } from "@/lib/retrieval/retriever";
-import type { RetrieveResponse } from "@/lib/retrieval/retriever";
+import { retrieveWithRanker } from "@/lib/retrieval/retriever";
+import type { RetrieveResponse, BenchmarkRanker } from "@/lib/retrieval/retriever";
+
+// Production retrieval mode (D-036/D-037): dense won H-tier in the benchmark
+// (A 1.21, 64% SQL validity) and is the default; rrf/bm25 remain selectable
+// via env for the benchmark harness and future comparison, never deleted.
+const VALID_MODES: BenchmarkRanker[] = ["bm25", "dense", "rrf"];
+const envMode = process.env.RETRIEVAL_MODE as BenchmarkRanker | undefined;
+const RETRIEVAL_MODE: BenchmarkRanker = envMode && VALID_MODES.includes(envMode) ? envMode : "rrf";
 
 // ── Route handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -25,7 +32,7 @@ export async function POST(req: NextRequest) {
   let retrievalTimeMs = 0;
   try {
     const t = Date.now();
-    retrievalResp = await retrieve(question, 5);
+    retrievalResp = await retrieveWithRanker(question, 5, DEFAULT_TENANT, RETRIEVAL_MODE);
     retrievalTimeMs = Date.now() - t;
   } catch { /* retrieval failure non-fatal; falls back to full schema path */ }
 
@@ -34,7 +41,7 @@ export async function POST(req: NextRequest) {
   let sqlGenTimeMs = 0;
   try {
     const t = Date.now();
-    sqlResult = await generateSQL(question, retrievalResp.results);
+    sqlResult = await generateSQL(question, retrievalResp.results, DEFAULT_TENANT);
     sqlGenTimeMs = Date.now() - t;
   } catch (err) {
     return NextResponse.json({
@@ -44,6 +51,7 @@ export async function POST(req: NextRequest) {
       retrieved: retrievalResp.results,
       retrieval_confidence: retrievalResp.confidence,
       retrieval_mode: USE_RETRIEVAL ? "chunks" : "full_schema",
+      retrieval_ranker: RETRIEVAL_MODE,
     }, { status: 500 });
   }
 
@@ -111,6 +119,7 @@ export async function POST(req: NextRequest) {
     retrieved: retrievalResp.results,
     retrieval_confidence: retrievalResp.confidence,
     retrieval_mode: USE_RETRIEVAL ? "chunks" : "full_schema",
+    retrieval_ranker: RETRIEVAL_MODE,
     error: null,
   });
 }
