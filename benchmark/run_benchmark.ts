@@ -70,18 +70,19 @@ function sanitize(v: unknown): unknown {
   return v;
 }
 
-async function execSql(sql: string): Promise<{ ok: boolean; rows?: unknown[][]; columns?: string[]; error?: string }> {
+async function execSql(sql: string, maxErr = 300): Promise<{ ok: boolean; rows?: unknown[][]; columns?: string[]; error?: string; rowCount?: number }> {
   const db = await getDb();
   try {
     const result = (await Promise.race([
       db.run(sql),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("query timeout (30s)")), 30_000)),
+      new Promise((_, rej) => setTimeout(() => { db.interrupt(); rej(new Error("query timeout (30s)")); }, 30_000)),
     ])) as Awaited<ReturnType<typeof db.run>>;
-    const rows = (await result.getRows()).slice(0, 50).map((r) => r.map(sanitize));
+    const all = await result.getRows();
+    const rows = all.slice(0, 50).map((r) => r.map(sanitize));
     const columns = result.columnNames();
-    return { ok: true, rows, columns };
+    return { ok: true, rows, columns, rowCount: all.length };
   } catch (e) {
-    return { ok: false, error: String(e).slice(0, 300) };
+    return { ok: false, error: String(e).slice(0, maxErr) };
   }
 }
 
@@ -204,8 +205,168 @@ async function fullRun() {
   console.log(`done: ${n} runs in ${RESULTS}`);
 }
 
-const mode = process.argv.includes("--estimate") ? "estimate" : "run";
-(mode === "estimate" ? estimate() : fullRun()).then(
+// ── Eval harness (D-040): on-demand, tier-selectable, per-stage instrumented ───
+// Reuses the contextFor/execSql/SYSTEM/prompt code above and the D-036 scorer in
+// build_report.py (via benchmark/score_run.py) — no second scorer.
+
+import { execFileSync } from "child_process";
+import crypto from "crypto";
+
+const PRICES: Record<string, [number, number]> = { // $/token [in, out]
+  "claude-haiku-4-5-20251001": [1.0 / 1e6, 5.0 / 1e6],
+  "claude-sonnet-4-5": [3.0 / 1e6, 15.0 / 1e6],
+};
+function priceFor(model: string): [number, number] {
+  const p = PRICES[model];
+  if (!p) { console.warn(`WARN: no price entry for ${model}; using Haiku rates for cost estimates`); return PRICES[MODEL]; }
+  return p;
+}
+
+function flag(name: string, dflt?: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
+}
+
+function scoreRecord(rec: object): { R: number | null; A: number | null; ctrl_ok: boolean | null } {
+  const out = execFileSync("python3", ["benchmark/score_run.py"], { input: JSON.stringify(rec), encoding: "utf-8" });
+  return JSON.parse(out);
+}
+
+function pct(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
+}
+
+function printSummary(file: string) {
+  const recs = fs.readFileSync(file, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+  console.log(`\n=== Run summary: ${recs[0]?.run_id} (${recs.length} records, mode=${recs[0]?.mode}, k=${recs[0]?.k}, model=${recs[0]?.model}) ===`);
+  console.log("tier  n   meanR  meanA  SQLvalid%  tokens_in  tokens_out  cost_usd  p50_ms  p95_ms");
+  const tiers = Array.from(new Set(recs.map((r) => r.tier))).sort();
+  for (const t of [...tiers, "ALL"]) {
+    const rs = t === "ALL" ? recs : recs.filter((r) => r.tier === t);
+    const R = rs.map((r) => r.scoring.R).filter((x: number | null) => x !== null);
+    const A = rs.map((r) => r.scoring.A).filter((x: number | null) => x !== null);
+    const valid = rs.filter((r) => r.scoring.sql_valid).length;
+    const tin = rs.reduce((a, r) => a + r.sql_generation.tokens_in + r.narration.tokens_in, 0);
+    const tout = rs.reduce((a, r) => a + r.sql_generation.tokens_out + r.narration.tokens_out, 0);
+    const cost = rs.reduce((a, r) => a + r.total_cost_usd, 0);
+    const lat = rs.map((r) => r.total_latency_ms).sort((a, b) => a - b);
+    console.log(
+      `${t.padEnd(5)} ${String(rs.length).padEnd(3)} ${mean(R).toFixed(2).padStart(5)}  ${mean(A).toFixed(2).padStart(5)}  ${((100 * valid) / rs.length).toFixed(1).padStart(8)}%  ${String(tin).padStart(9)}  ${String(tout).padStart(10)}  ${cost.toFixed(4).padStart(8)}  ${String(pct(lat, 50)).padStart(6)}  ${String(pct(lat, 95)).padStart(6)}`
+    );
+  }
+}
+
+async function evalRun() {
+  const tierArg = (flag("tier", "all") as string).toUpperCase() === "ALL" ? "all" : (flag("tier") as string).toUpperCase();
+  const evalMode = flag("mode", "dense") as string;
+  const k = Number(flag("k", "5"));
+  const label = flag("label", "") as string;
+  const model = flag("model", MODEL) as string;
+  if (!["bm25", "dense", "rrf", "schema"].includes(evalMode)) throw new Error(`bad --mode ${evalMode}`);
+  if (tierArg !== "all" && !["S", "M", "H", "C"].includes(tierArg)) throw new Error(`bad --tier ${tierArg}`);
+  const qs = tierArg === "all" ? questions : questions.filter((q) => q.tier === tierArg);
+  const [pIn, pOut] = priceFor(model);
+
+  // cost guard: rough estimate from sampled context sizes (no API calls)
+  const sample = await Promise.all(qs.slice(0, 3).map((q) => contextFor(evalMode, q.question)));
+  const ctxTok = Math.round(sample.reduce((a, s) => a + estimateTokens(s.context), 0) / Math.max(1, sample.length));
+  const estCost = qs.length * ((estimateTokens(SYSTEM) + ctxTok + 30) * pIn + 180 * pOut + (600 * PRICES[MODEL][0] + 120 * PRICES[MODEL][1]));
+  console.log(`Eval: tier=${tierArg} mode=${evalMode} k=${k} model=${model} label="${label}" questions=${qs.length}`);
+  console.log(`ESTIMATED COST: $${estCost.toFixed(3)} (stop-and-ask threshold: $5)`);
+  if (estCost > 5) { console.error("Estimate exceeds $5 — stopping. Re-run after confirming."); process.exit(2); }
+
+  // capture usage from narrator's own Anthropic client without modifying narrator.ts
+  const MsgProto = Object.getPrototypeOf(new Anthropic({ apiKey: "x" }).messages) as { create: (...a: unknown[]) => Promise<{ usage: { input_tokens: number; output_tokens: number } }> };
+  const origCreate = MsgProto.create;
+  let captured: { in: number; out: number } | null = null;
+  MsgProto.create = async function (this: unknown, ...a: unknown[]) {
+    const r = await origCreate.apply(this, a);
+    captured = { in: r.usage.input_tokens, out: r.usage.output_tokens };
+    return r;
+  };
+  const { narrate } = await import("../lib/narrator");
+
+  const client = new Anthropic();
+  const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}_${crypto.randomBytes(2).toString("hex")}`;
+  fs.mkdirSync("benchmark/runs", { recursive: true });
+  const file = `benchmark/runs/${runId}.jsonl`;
+  console.log(`run_id=${runId} -> ${file}`);
+  const [nIn, nOut] = PRICES[MODEL];
+
+  for (const q of qs) {
+    const tq = Date.now();
+    const t0 = Date.now();
+    const rk = evalMode === "schema" ? { context: (await contextFor("schema", q.question)).context, chunkIds: [] as string[] } : await (async () => {
+      const resp = await retrieveWithRanker(q.question, k, TENANT, evalMode as BenchmarkRanker);
+      return { context: resp.results.map((r) => `[${r.id}] ${r.text}`).join("\n\n"), chunkIds: resp.results.map((r) => r.id) };
+    })();
+    const retrievalMs = Date.now() - t0;
+
+    const t1 = Date.now();
+    let sql = "", sIn = 0, sOut = 0, apiError = "";
+    try {
+      const resp = await client.messages.create({
+        model, max_tokens: MAX_OUT_TOKENS, system: SYSTEM,
+        messages: [{ role: "user", content: buildUserPrompt(rk.context, q.question) }],
+      });
+      const block = resp.content.find((b) => b.type === "text");
+      sql = (block && block.type === "text" ? block.text : "").trim();
+      sIn = resp.usage.input_tokens; sOut = resp.usage.output_tokens;
+    } catch (e) { apiError = String(e); }
+    const sqlGenMs = Date.now() - t1;
+    const sqlCost = sIn * pIn + sOut * pOut;
+
+    const refused = sql.startsWith("REFUSE:");
+    const t2 = Date.now();
+    let exec: Awaited<ReturnType<typeof execSql>> = { ok: false, error: "no sql" };
+    if (sql && !refused && !apiError) {
+      exec = await execSql(sql.replace(/^```(sql)?/i, "").replace(/```$/, "").trim(), 2000);
+    }
+    const execMs = Date.now() - t2;
+    const errMsg = exec.ok ? null : (refused ? sql : (apiError || exec.error || null));
+
+    // narration (only when there is a result to narrate)
+    let nTin = 0, nTout = 0, narrMs = 0;
+    if (exec.ok && exec.rows && exec.columns) {
+      captured = null;
+      const t3 = Date.now();
+      try {
+        await narrate({ question: q.question, metric_used: null, sentiment: null, columns: exec.columns, rows: exec.rows, row_count: exec.rowCount ?? exec.rows.length, truncated: false }, TENANT);
+      } catch { /* narration failure must not lose the record */ }
+      narrMs = Date.now() - t3;
+      const c = captured as { in: number; out: number } | null;
+      if (c) { nTin = c.in; nTout = c.out; }
+    }
+    const narrCost = nTin * nIn + nTout * nOut;
+
+    const base = {
+      run_id: runId, ts: new Date().toISOString(), id: q.id, tier: q.tier, mode: evalMode, k, model, label,
+      question: q.question,
+      retrieval: { chunk_ids: rk.chunkIds, latency_ms: retrievalMs },
+      sql_generation: { sql, tokens_in: sIn, tokens_out: sOut, latency_ms: sqlGenMs, estimated_cost_usd: Number(sqlCost.toFixed(6)) },
+      sql_execution: { ran: !!(sql && !refused && !apiError), error_message: errMsg, rows_returned: exec.ok ? (exec.rowCount ?? 0) : 0, latency_ms: execMs },
+      narration: { tokens_in: nTin, tokens_out: nTout, latency_ms: narrMs, estimated_cost_usd: Number(narrCost.toFixed(6)) },
+      retry_count: 0,
+    };
+    const scorerInput = { id: q.id, mode: evalMode, retrieved_chunk_ids: rk.chunkIds, sql_valid: exec.ok, refused, result_rows: exec.ok ? exec.rows ?? null : null };
+    const sc = scoreRecord(scorerInput);
+    const record = {
+      ...base,
+      scoring: { R: sc.R, A: sc.A, sql_valid: exec.ok, refused, ctrl_ok: sc.ctrl_ok },
+      total_latency_ms: Date.now() - tq,
+      total_cost_usd: Number((sqlCost + narrCost).toFixed(6)),
+    };
+    fs.appendFileSync(file, JSON.stringify(record) + "\n"); // incremental: a crash never loses completed questions
+    console.log(`${q.id} valid=${exec.ok} R=${sc.R} A=${sc.A} cost=$${record.total_cost_usd} ${record.total_latency_ms}ms${errMsg ? " ERR=" + String(errMsg).slice(0, 90) : ""}`);
+  }
+  printSummary(file);
+  console.log(`\nrun file: ${file}`);
+}
+
+const cli = process.argv.includes("--eval") ? "eval" : process.argv.includes("--estimate") ? "estimate" : "run";
+(cli === "eval" ? evalRun() : cli === "estimate" ? estimate() : fullRun()).then(
   () => process.exit(0),
   (e) => { console.error(e); process.exit(1); }
 );

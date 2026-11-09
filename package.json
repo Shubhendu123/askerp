@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "eval": "npx tsx benchmark/run_benchmark.ts --eval"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
