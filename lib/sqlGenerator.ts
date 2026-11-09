@@ -172,19 +172,32 @@ export interface SQLResult {
   reasoning: string;
   confidence: string;
   error?: string;
+  usage?: { input_tokens: number; output_tokens: number };
+}
+
+/** Table names of a tenant (from schema.yaml) for the SQL validator (D-042). */
+export function getTenantSchemaInfo(tenant: string): { schema: string; tables: Set<string>; requireQualification: boolean } {
+  const tables = new Set(parsedSchema.tables.filter((t) => t.tenant === tenant).map((t) => t.name));
+  return tenant === "mro"
+    ? { schema: "mro_distributor", tables, requireQualification: true }
+    : { schema: "main", tables, requireQualification: false };
 }
 
 export async function generateSQL(
   question: string,
   retrievedChunks?: RetrievalResult[],
-  tenant: string = DEFAULT_TENANT
+  tenant: string = DEFAULT_TENANT,
+  retry?: { prevSql: string; error: string } // D-042: verbatim engine error from the failed attempt
 ): Promise<SQLResult> {
   const system =
     USE_RETRIEVAL && retrievedChunks && retrievedChunks.length > 0
       ? buildRetrievedSystem(retrievedChunks, tenant)
       : buildFullSystem(tenant);
 
-  const userMsg = `${tenantFewShot(tenant)}\n\nQUESTION: ${question}\n\nGenerate the SQL now. Output only the JSON object.`;
+  const retrySection = retry
+    ? `\n\nYOUR PREVIOUS SQL:\n${retry.prevSql}\n\nIt failed with this error:\n${retry.error}\n\nReturn a corrected JSON object (same format) with fixed SQL. If it truly cannot be answered, set "sql" to null.`
+    : "";
+  const userMsg = `${tenantFewShot(tenant)}\n\nQUESTION: ${question}${retrySection}\n\nGenerate the SQL now. Output only the JSON object.`;
 
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -198,8 +211,9 @@ export async function generateSQL(
     .replace(/^```(?:json)?\s*/m, "")
     .replace(/\s*```$/m, "");
 
+  const usage = { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens };
   try {
-    return JSON.parse(raw) as SQLResult;
+    return { ...(JSON.parse(raw) as SQLResult), usage };
   } catch {
     return {
       sql: null,
@@ -209,6 +223,7 @@ export async function generateSQL(
       reasoning: `JSON parse failed. Raw: ${raw.slice(0, 200)}`,
       confidence: "LOW",
       error: "json_parse_failed",
+      usage,
     };
   }
 }

@@ -20,6 +20,7 @@ export const DEFAULT_MAX_ROWS = Number(process.env.SQL_MAX_ROWS) > 0 ? Number(pr
 export interface TenantSchemaInfo {
   schema: string;          // e.g. "mro_distributor"
   tables: Set<string>;     // bare table names of the active tenant
+  requireQualification?: boolean; // default true; false for tenants whose tables are referenced unqualified (northwind)
 }
 
 export interface ValidationFailure { cls: ErrorClass; message: string }
@@ -66,6 +67,7 @@ export function validateStatic(sqlIn: string, info: TenantSchemaInfo): Validatio
     } else {
       const t = parts[0];
       if (ctes.has(t)) continue;
+      if (info.tables.has(t) && info.requireQualification === false) continue;
       if (info.tables.has(t)) return { cls: "binder_error", message: `Table "${t}" must be qualified as ${info.schema}.${t}` };
       return { cls: "binder_error", message: `Unknown table reference: ${t}` };
     }

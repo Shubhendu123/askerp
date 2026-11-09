@@ -358,7 +358,7 @@ async function ensureInit(): Promise<void> {
 
 const EXPAND_TABLE_CAP = 12;
 
-function expansionEnabled(override?: boolean): boolean {
+export function expansionEnabled(override?: boolean): boolean {
   if (override !== undefined) return override;
   const v = (process.env.RETRIEVAL_EXPAND_TABLES ?? "true").toLowerCase();
   return !["false", "0", "off", "no"].includes(v);
