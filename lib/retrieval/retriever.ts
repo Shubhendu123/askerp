@@ -45,6 +45,7 @@ interface MetricDef {
   synonyms?: string[];
   example_questions?: string[];
   formula?: string;
+  tables?: string[]; // declared table dependencies, e.g. "mro_distributor.o2c_sales_order_line" (D-033)
 }
 
 interface SchemaYaml {
@@ -61,6 +62,7 @@ interface Chunk {
   type: "table" | "metric";
   name: string;
   text: string;
+  tables?: string[]; // metric chunks only: declared table names, schema prefix stripped (metadata; not embedded)
 }
 
 export interface RetrievalResult {
@@ -69,6 +71,7 @@ export interface RetrievalResult {
   name: string;
   score: number;
   text: string;
+  expanded?: boolean; // true when appended by table-expansion rather than ranked (D-041)
 }
 
 export interface ConfidenceResult {
@@ -313,7 +316,10 @@ async function initCorpus(): Promise<void> {
   }
   for (const metric of metricsConfig.metrics ?? []) {
     const tenant = metric.tenant ?? "northwind";
-    chunks.push({ id: `${tenant}:${metric.name}`, tenant, type: "metric", name: metric.name, text: buildMetricText(metric) });
+    chunks.push({
+      id: `${tenant}:${metric.name}`, tenant, type: "metric", name: metric.name, text: buildMetricText(metric),
+      tables: (metric.tables ?? []).map((t) => t.split(".").pop() as string),
+    });
   }
 
   const ids = new Set<string>();
@@ -345,6 +351,40 @@ async function ensureInit(): Promise<void> {
   await _initPromise;
 }
 
+// ── Table expansion (D-041) ────────────────────────────────────────────────────
+// After ranking + tenant filtering: for each retrieved METRIC chunk, deterministically append
+// the TABLE chunks it declares in `tables` (D-033), if not already present. No similarity
+// search. Additive: k still controls how many ranked chunks are selected.
+
+const EXPAND_TABLE_CAP = 12;
+
+function expansionEnabled(override?: boolean): boolean {
+  if (override !== undefined) return override;
+  const v = (process.env.RETRIEVAL_EXPAND_TABLES ?? "true").toLowerCase();
+  return !["false", "0", "off", "no"].includes(v);
+}
+
+function expandTables(results: RetrievalResult[], index: TenantIndex, tenant: string, enabled: boolean): RetrievalResult[] {
+  if (!enabled) return results;
+  const byId = new Map(index.chunks.map((c) => [c.id, c]));
+  const present = new Set(results.map((r) => r.id));
+  const added: RetrievalResult[] = [];
+  let capped = false;
+  outer: for (const r of results) {
+    if (r.type !== "metric") continue;
+    for (const t of byId.get(r.id)?.tables ?? []) {
+      const id = `${tenant}:${t}`; // tenant-prefixed: cannot resolve to another tenant's chunk (D-035)
+      const c = byId.get(id);
+      if (!c || c.type !== "table" || c.tenant !== tenant || present.has(id)) continue;
+      if (added.length >= EXPAND_TABLE_CAP) { capped = true; break outer; }
+      present.add(id);
+      added.push({ id: c.id, type: c.type, name: c.name, score: 0, text: c.text, expanded: true });
+    }
+  }
+  if (capped) console.warn(`[retrieval] table-expansion cap (${EXPAND_TABLE_CAP}) hit; further tables dropped`);
+  return [...results, ...added];
+}
+
 // ── Test path (benchmark, D-036) ───────────────────────────────────────────────
 // Exposes each ranker separately. Production default path is retrieve() below
 // (rrf) and is unchanged.
@@ -362,9 +402,10 @@ export async function retrieveWithRanker(
   query: string,
   k: number,
   tenant: string,
-  ranker: BenchmarkRanker
+  ranker: BenchmarkRanker,
+  expand?: boolean // undefined => RETRIEVAL_EXPAND_TABLES env (default on)
 ): Promise<RetrieveResponse> {
-  if (ranker === "rrf") return retrieve(query, k, tenant);
+  if (ranker === "rrf") return retrieve(query, k, tenant, expand);
 
   await ensureInit();
   const index = _tenants!.get(tenant);
@@ -385,21 +426,22 @@ export async function retrieveWithRanker(
   }
 
   const topK = ranked.slice(0, k);
+  const ranked_results: RetrievalResult[] = topK.map((i, rank) => ({
+    id: index.chunks[i].id,
+    type: index.chunks[i].type,
+    name: index.chunks[i].name,
+    score: Math.round(scores[rank] * 10000) / 10000,
+    text: index.chunks[i].text,
+  }));
   return {
-    results: topK.map((i, rank) => ({
-      id: index.chunks[i].id,
-      type: index.chunks[i].type,
-      name: index.chunks[i].name,
-      score: Math.round(scores[rank] * 10000) / 10000,
-      text: index.chunks[i].text,
-    })),
+    results: expandTables(ranked_results, index, tenant, expansionEnabled(expand)),
     confidence: computeConfidence(scores),
   };
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-export async function retrieve(query: string, k = 5, tenant?: string): Promise<RetrieveResponse> {
+export async function retrieve(query: string, k = 5, tenant?: string, expand?: boolean): Promise<RetrieveResponse> {
   if (!query.trim()) {
     return { results: [], confidence: computeConfidence([]) };
   }
@@ -447,5 +489,5 @@ export async function retrieve(query: string, k = 5, tenant?: string): Promise<R
     text: chunks[i].text,
   }));
 
-  return { results, confidence };
+  return { results: expandTables(results, index, activeTenant, expansionEnabled(expand)), confidence };
 }

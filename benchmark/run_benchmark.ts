@@ -269,6 +269,9 @@ async function evalRun() {
   const k = Number(flag("k", "5"));
   const label = flag("label", "") as string;
   const model = flag("model", MODEL) as string;
+  const expandFlag = flag("expand");
+  if (expandFlag !== undefined && !["true", "false"].includes(expandFlag)) throw new Error(`bad --expand ${expandFlag}`);
+  const expand = expandFlag === undefined ? undefined : expandFlag === "true";
   if (!["bm25", "dense", "rrf", "schema"].includes(evalMode)) throw new Error(`bad --mode ${evalMode}`);
   if (tierArg !== "all" && !["S", "M", "H", "C"].includes(tierArg)) throw new Error(`bad --tier ${tierArg}`);
   const qs = tierArg === "all" ? questions : questions.filter((q) => q.tier === tierArg);
@@ -303,9 +306,9 @@ async function evalRun() {
   for (const q of qs) {
     const tq = Date.now();
     const t0 = Date.now();
-    const rk = evalMode === "schema" ? { context: (await contextFor("schema", q.question)).context, chunkIds: [] as string[] } : await (async () => {
-      const resp = await retrieveWithRanker(q.question, k, TENANT, evalMode as BenchmarkRanker);
-      return { context: resp.results.map((r) => `[${r.id}] ${r.text}`).join("\n\n"), chunkIds: resp.results.map((r) => r.id) };
+    const rk = evalMode === "schema" ? { context: (await contextFor("schema", q.question)).context, chunkIds: [] as string[], expandedIds: [] as string[] } : await (async () => {
+      const resp = await retrieveWithRanker(q.question, k, TENANT, evalMode as BenchmarkRanker, expand);
+      return { context: resp.results.map((r) => `[${r.id}] ${r.text}`).join("\n\n"), chunkIds: resp.results.map((r) => r.id), expandedIds: resp.results.filter((r) => r.expanded).map((r) => r.id) };
     })();
     const retrievalMs = Date.now() - t0;
 
@@ -347,9 +350,9 @@ async function evalRun() {
     const narrCost = nTin * nIn + nTout * nOut;
 
     const base = {
-      run_id: runId, ts: new Date().toISOString(), id: q.id, tier: q.tier, mode: evalMode, k, model, label,
+      run_id: runId, ts: new Date().toISOString(), id: q.id, tier: q.tier, mode: evalMode, k, expand: expand ?? (process.env.RETRIEVAL_EXPAND_TABLES ?? "true") !== "false", model, label,
       question: q.question,
-      retrieval: { chunk_ids: rk.chunkIds, latency_ms: retrievalMs },
+      retrieval: { chunk_ids: rk.chunkIds, expanded_chunk_ids: rk.expandedIds, latency_ms: retrievalMs },
       sql_generation: { sql, tokens_in: sIn, tokens_out: sOut, latency_ms: sqlGenMs, estimated_cost_usd: Number(sqlCost.toFixed(6)) },
       sql_execution: { ran: !!(sql && !refused && !apiError), error_message: errMsg, rows_returned: exec.ok ? (exec.rowCount ?? 0) : 0, latency_ms: execMs },
       narration: { tokens_in: nTin, tokens_out: nTout, latency_ms: narrMs, estimated_cost_usd: Number(narrCost.toFixed(6)) },
