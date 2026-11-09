@@ -11,6 +11,9 @@ import type { RetrieveResponse, BenchmarkRanker } from "@/lib/retrieval/retrieve
 const VALID_MODES: BenchmarkRanker[] = ["bm25", "dense", "rrf"];
 const envMode = process.env.RETRIEVAL_MODE as BenchmarkRanker | undefined;
 const RETRIEVAL_MODE: BenchmarkRanker = envMode && VALID_MODES.includes(envMode) ? envMode : "rrf";
+// D-041: production default k=10 with table-expansion (Gate B). RETRIEVAL_K overrides; invalid values fall back to 10.
+const envK = Number(process.env.RETRIEVAL_K);
+const RETRIEVAL_K: number = Number.isInteger(envK) && envK > 0 && envK <= 50 ? envK : 10;
 
 // ── Route handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -32,7 +35,7 @@ export async function POST(req: NextRequest) {
   let retrievalTimeMs = 0;
   try {
     const t = Date.now();
-    retrievalResp = await retrieveWithRanker(question, 5, DEFAULT_TENANT, RETRIEVAL_MODE);
+    retrievalResp = await retrieveWithRanker(question, RETRIEVAL_K, DEFAULT_TENANT, RETRIEVAL_MODE); // table-expansion is on by default (RETRIEVAL_EXPAND_TABLES)
     retrievalTimeMs = Date.now() - t;
   } catch { /* retrieval failure non-fatal; falls back to full schema path */ }
 
