@@ -18,6 +18,7 @@ for (const line of fs.readFileSync(path.join(process.cwd(), ".env.local"), "utf-
 import Anthropic from "@anthropic-ai/sdk";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { retrieveWithRanker, getTenantChunks, BenchmarkRanker } from "../lib/retrieval/retriever";
+import { runWithValidation } from "../lib/sqlValidator";
 
 const MODEL = "claude-haiku-4-5-20251001"; // production SQL-generation model
 const PRICE_IN = 1.0 / 1e6;  // Haiku 4.5 $/token input
@@ -272,6 +273,10 @@ async function evalRun() {
   const expandFlag = flag("expand");
   if (expandFlag !== undefined && !["true", "false"].includes(expandFlag)) throw new Error(`bad --expand ${expandFlag}`);
   const expand = expandFlag === undefined ? undefined : expandFlag === "true";
+  const validatorFlag = flag("validator", "off");
+  if (!["on", "off"].includes(validatorFlag as string)) throw new Error(`bad --validator ${validatorFlag}`);
+  const validatorOn = validatorFlag === "on";
+  const tenantTables = new Set((await getTenantChunks(TENANT)).filter((c) => c.type === "table").map((c) => c.name));
   if (!["bm25", "dense", "rrf", "schema"].includes(evalMode)) throw new Error(`bad --mode ${evalMode}`);
   if (tierArg !== "all" && !["S", "M", "H", "C"].includes(tierArg)) throw new Error(`bad --tier ${tierArg}`);
   const qs = tierArg === "all" ? questions : questions.filter((q) => q.tier === tierArg);
@@ -312,28 +317,66 @@ async function evalRun() {
     })();
     const retrievalMs = Date.now() - t0;
 
-    const t1 = Date.now();
-    let sql = "", sIn = 0, sOut = 0, apiError = "";
-    try {
-      const resp = await client.messages.create({
-        model, max_tokens: MAX_OUT_TOKENS, system: SYSTEM,
-        messages: [{ role: "user", content: buildUserPrompt(rk.context, q.question) }],
-      });
-      const block = resp.content.find((b) => b.type === "text");
-      sql = (block && block.type === "text" ? block.text : "").trim();
-      sIn = resp.usage.input_tokens; sOut = resp.usage.output_tokens;
-    } catch (e) { apiError = String(e); }
-    const sqlGenMs = Date.now() - t1;
-    const sqlCost = sIn * pIn + sOut * pOut;
-
-    const refused = sql.startsWith("REFUSE:");
-    const t2 = Date.now();
+    let sql = "", sIn = 0, sOut = 0, sqlGenMs = 0, execMs = 0, refused = false, ran = false;
     let exec: Awaited<ReturnType<typeof execSql>> = { ok: false, error: "no sql" };
-    if (sql && !refused && !apiError) {
-      exec = await execSql(sql.replace(/^```(sql)?/i, "").replace(/```$/, "").trim(), 2000);
+    let errMsg: string | null = null;
+    let valFields: Record<string, unknown> = {};
+    const callModel = async (userPrompt: string) => {
+      const t = Date.now();
+      try {
+        const resp = await client.messages.create({ model, max_tokens: MAX_OUT_TOKENS, system: SYSTEM, messages: [{ role: "user", content: userPrompt }] });
+        const block = resp.content.find((b) => b.type === "text");
+        return { sql: (block && block.type === "text" ? block.text : "").trim(), tokens_in: resp.usage.input_tokens, tokens_out: resp.usage.output_tokens, latency_ms: Date.now() - t };
+      } catch (e) { return { sql: "", tokens_in: 0, tokens_out: 0, latency_ms: Date.now() - t, apiError: String(e) }; }
+    };
+
+    if (!validatorOn) {
+      const g = await callModel(buildUserPrompt(rk.context, q.question));
+      sql = g.sql; sIn = g.tokens_in; sOut = g.tokens_out; sqlGenMs = g.latency_ms;
+      const apiError = g.apiError ?? "";
+      refused = sql.startsWith("REFUSE:");
+      const t2 = Date.now();
+      if (sql && !refused && !apiError) exec = await execSql(sql.replace(/^```(sql)?/i, "").replace(/```$/, "").trim(), 2000);
+      execMs = Date.now() - t2;
+      ran = !!(sql && !refused && !apiError);
+      errMsg = exec.ok ? null : (refused ? sql : (apiError || exec.error || null));
+    } else {
+      // D-041 Part C: static checks -> EXPLAIN dry-run -> execute; classified retry (max 2, parser/binder only)
+      const info = { schema: "mro_distributor", tables: tenantTables };
+      let finalRows: Awaited<ReturnType<typeof execSql>> | null = null;
+      let exMs = 0;
+      const out = await runWithValidation({
+        info,
+        generate: async (retry) => {
+          const prompt = retry
+            ? `${buildUserPrompt(rk.context, q.question)} ${retry.prevSql}\n\nThat SQL failed with this error:\n${retry.error}\n\nReturn a corrected single DuckDB SQL statement (same rules; reply with ONLY the SQL, or REFUSE: <reason>).\nSQL:`
+            : buildUserPrompt(rk.context, q.question);
+          const g = await callModel(prompt);
+          return { ...g, sql: g.sql.replace(/^```(sql)?/i, "").replace(/```$/, "").trim() };
+        },
+        explain: async (stmt) => { const t = Date.now(); const r = await execSql(`EXPLAIN ${stmt}`, 2000); exMs += Date.now() - t; if (!r.ok) throw new Error(r.error); },
+        execute: async (stmt) => { const t = Date.now(); const r = await execSql(stmt, 2000); exMs += Date.now() - t; if (!r.ok) throw new Error(r.error); finalRows = r; return r; },
+      });
+      sql = out.finalSql;
+      sIn = out.attempts.reduce((a, x) => a + x.tokens_in, 0);
+      sOut = out.attempts.reduce((a, x) => a + x.tokens_out, 0);
+      sqlGenMs = out.attempts.reduce((a, x) => a + x.latency_ms, 0);
+      execMs = exMs;
+      refused = out.final_error_class === "refusal";
+      ran = out.attempts.some((x) => x.stage === "explain" || x.stage === "execute" || x.stage === "ok");
+      exec = out.ok && finalRows ? (finalRows as Awaited<ReturnType<typeof execSql>>) : { ok: false, error: out.final_error_message ?? "failed" };
+      errMsg = out.ok ? null : out.final_error_message;
+      const first = out.attempts[0];
+      const rest = out.attempts.slice(1);
+      valFields = {
+        validator: "on", error_class: out.final_error_class, retry_outcome: out.retry_outcome, limit_added: out.limit_added,
+        first_attempt: { ok: first.stage === "ok", stage: first.stage, error_class: first.error_class, error_message: first.error_message },
+        attempts: out.attempts.map((x) => ({ stage: x.stage, error_class: x.error_class, error_message: x.error_message, tokens_in: x.tokens_in, tokens_out: x.tokens_out, latency_ms: x.latency_ms })),
+        retry_overhead: { tokens_in: rest.reduce((a, x) => a + x.tokens_in, 0), tokens_out: rest.reduce((a, x) => a + x.tokens_out, 0), latency_ms: rest.reduce((a, x) => a + x.latency_ms, 0), estimated_cost_usd: Number((rest.reduce((a, x) => a + x.tokens_in, 0) * pIn + rest.reduce((a, x) => a + x.tokens_out, 0) * pOut).toFixed(6)) },
+      };
+      valFields.retry_count = out.retry_count;
     }
-    const execMs = Date.now() - t2;
-    const errMsg = exec.ok ? null : (refused ? sql : (apiError || exec.error || null));
+    const sqlCost = sIn * pIn + sOut * pOut;
 
     // narration (only when there is a result to narrate)
     let nTin = 0, nTout = 0, narrMs = 0;
@@ -354,9 +397,10 @@ async function evalRun() {
       question: q.question,
       retrieval: { chunk_ids: rk.chunkIds, expanded_chunk_ids: rk.expandedIds, latency_ms: retrievalMs },
       sql_generation: { sql, tokens_in: sIn, tokens_out: sOut, latency_ms: sqlGenMs, estimated_cost_usd: Number(sqlCost.toFixed(6)) },
-      sql_execution: { ran: !!(sql && !refused && !apiError), error_message: errMsg, rows_returned: exec.ok ? (exec.rowCount ?? 0) : 0, latency_ms: execMs },
+      sql_execution: { ran, error_message: errMsg, error_class: (valFields.error_class as string | null | undefined) ?? null, rows_returned: exec.ok ? (exec.rowCount ?? 0) : 0, latency_ms: execMs },
       narration: { tokens_in: nTin, tokens_out: nTout, latency_ms: narrMs, estimated_cost_usd: Number(narrCost.toFixed(6)) },
-      retry_count: 0,
+      retry_count: (valFields.retry_count as number | undefined) ?? 0,
+      validation: valFields,
     };
     const scorerInput = { id: q.id, mode: evalMode, retrieved_chunk_ids: rk.chunkIds, sql_valid: exec.ok, refused, result_rows: exec.ok ? exec.rows ?? null : null };
     const sc = scoreRecord(scorerInput);
