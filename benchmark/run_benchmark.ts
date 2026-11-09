@@ -227,7 +227,8 @@ function flag(name: string, dflt?: string): string | undefined {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 }
 
-function scoreRecord(rec: object): { R: number | null; A: number | null; ctrl_ok: boolean | null } {
+type RetScore = { R_legacy: number | null; R_recall: number | null; R_precision: number | null; required_tables_retrieved: { count: number; total: number; share: number | null } | null; A: number | null; ctrl_ok: boolean | null };
+function scoreRecord(rec: object): RetScore {
   const out = execFileSync("python3", ["benchmark/score_run.py"], { input: JSON.stringify(rec), encoding: "utf-8" });
   return JSON.parse(out);
 }
@@ -241,11 +242,15 @@ function printSummary(file: string) {
   const recs = fs.readFileSync(file, "utf-8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
   const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
   console.log(`\n=== Run summary: ${recs[0]?.run_id} (${recs.length} records, mode=${recs[0]?.mode}, k=${recs[0]?.k}, model=${recs[0]?.model}) ===`);
-  console.log("tier  n   meanR  meanA  SQLvalid%  tokens_in  tokens_out  cost_usd  p50_ms  p95_ms");
+  console.log("tier  n   R_leg  recall  prec  tblCov  meanA  SQLvalid%  tokens_in  tokens_out  cost_usd  p50_ms  p95_ms");
   const tiers = Array.from(new Set(recs.map((r) => r.tier))).sort();
   for (const t of [...tiers, "ALL"]) {
     const rs = t === "ALL" ? recs : recs.filter((r) => r.tier === t);
-    const R = rs.map((r) => r.scoring.R).filter((x: number | null) => x !== null);
+    const nn = (f: (r: any) => number | null | undefined) => rs.map(f).filter((x: number | null | undefined) => x !== null && x !== undefined) as number[]; // eslint-disable-line
+    const R = nn((r) => r.scoring.R_legacy);
+    const Rrec = nn((r) => r.scoring.R_recall);
+    const Rprec = nn((r) => r.scoring.R_precision);
+    const cov = nn((r) => r.scoring.required_tables_retrieved?.share);
     const A = rs.map((r) => r.scoring.A).filter((x: number | null) => x !== null);
     const valid = rs.filter((r) => r.scoring.sql_valid).length;
     const tin = rs.reduce((a, r) => a + r.sql_generation.tokens_in + r.narration.tokens_in, 0);
@@ -253,7 +258,7 @@ function printSummary(file: string) {
     const cost = rs.reduce((a, r) => a + r.total_cost_usd, 0);
     const lat = rs.map((r) => r.total_latency_ms).sort((a, b) => a - b);
     console.log(
-      `${t.padEnd(5)} ${String(rs.length).padEnd(3)} ${mean(R).toFixed(2).padStart(5)}  ${mean(A).toFixed(2).padStart(5)}  ${((100 * valid) / rs.length).toFixed(1).padStart(8)}%  ${String(tin).padStart(9)}  ${String(tout).padStart(10)}  ${cost.toFixed(4).padStart(8)}  ${String(pct(lat, 50)).padStart(6)}  ${String(pct(lat, 95)).padStart(6)}`
+      `${t.padEnd(5)} ${String(rs.length).padEnd(3)} ${mean(R).toFixed(2).padStart(5)}  ${mean(Rrec).toFixed(2).padStart(6)}  ${mean(Rprec).toFixed(2).padStart(4)}  ${mean(cov).toFixed(2).padStart(6)}  ${mean(A).toFixed(2).padStart(5)}  ${((100 * valid) / rs.length).toFixed(1).padStart(8)}%  ${String(tin).padStart(9)}  ${String(tout).padStart(10)}  ${cost.toFixed(4).padStart(8)}  ${String(pct(lat, 50)).padStart(6)}  ${String(pct(lat, 95)).padStart(6)}`
     );
   }
 }
@@ -354,12 +359,12 @@ async function evalRun() {
     const sc = scoreRecord(scorerInput);
     const record = {
       ...base,
-      scoring: { R: sc.R, A: sc.A, sql_valid: exec.ok, refused, ctrl_ok: sc.ctrl_ok },
+      scoring: { R_legacy: sc.R_legacy, R_recall: sc.R_recall, R_precision: sc.R_precision, required_tables_retrieved: sc.required_tables_retrieved, A: sc.A, sql_valid: exec.ok, refused, ctrl_ok: sc.ctrl_ok },
       total_latency_ms: Date.now() - tq,
       total_cost_usd: Number((sqlCost + narrCost).toFixed(6)),
     };
     fs.appendFileSync(file, JSON.stringify(record) + "\n"); // incremental: a crash never loses completed questions
-    console.log(`${q.id} valid=${exec.ok} R=${sc.R} A=${sc.A} cost=$${record.total_cost_usd} ${record.total_latency_ms}ms${errMsg ? " ERR=" + String(errMsg).slice(0, 90) : ""}`);
+    console.log(`${q.id} valid=${exec.ok} Rrec=${sc.R_recall} A=${sc.A} cost=$${record.total_cost_usd} ${record.total_latency_ms}ms${errMsg ? " ERR=" + String(errMsg).slice(0, 90) : ""}`);
   }
   printSummary(file);
   console.log(`\nrun file: ${file}`);
