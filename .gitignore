@@ -47,3 +47,4 @@ data/retrieval_eval_v2_full.log
 
 *.duckdb
 data/northwind.db
+dev.log
