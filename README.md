@@ -1,6 +1,14 @@
 # AskERP
 **Conversational analytics for Northwind Furniture — ask questions, get answers.**
 
+## Live demos
+Two tenants running on one codebase:
+
+- **[MRO Distributor](https://askerp.vercel.app)** — industrial supply, ERP analytics: order-to-cash, receivables, procurement and inventory questions answered over a synthetic NetSuite-shaped warehouse.
+- **[Harborline Global Custody](https://harborline-omega.vercel.app)** — securities services: settlement fails, CSDR penalties, corporate actions and tax-reclaim leakage, answered from both the data and the firm's policy documents (with inline policy citations).
+
+The tenant is resolved per deployment, server-side: each Vercel project sets `ACTIVE_TENANT`, and retrieval, SQL generation, validation and the UI all filter to that one tenant. There is no tenant switcher in the browser.
+
 Status: 🚧 Week 1 complete (data foundation) — Week 2 starting (semantic layer + agent loop)
 
 ## About
