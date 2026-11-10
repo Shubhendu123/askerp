@@ -211,6 +211,16 @@ export function loadPolicyChunks(root: string): Chunk[] {
   return out;
 }
 
+/**
+ * Relevance floor for RANKED policy chunks (dense cosine). Policy chunks below it are not admitted by ranking; policies pulled in
+ * through a retrieved metric's `policy_refs` are never filtered by it. Calibrated on 10 questions outside the benchmark: the top
+ * ranked policy chunk scored 0.53-0.70 on policy-seeking questions and 0.29-0.52 on data-only ones (D-046). 0 disables.
+ */
+export function policyMinScore(): number {
+  const n = Number(process.env.RETRIEVAL_POLICY_MIN_SCORE ?? 0.5);
+  return Number.isFinite(n) && n >= 0 ? n : 0.5;
+}
+
 export function maxPolicyChunks(): number {
   const n = Number(process.env.RETRIEVAL_MAX_POLICY_CHUNKS ?? 3);
   return Number.isInteger(n) && n >= 0 ? n : 3;
@@ -396,9 +406,25 @@ async function initCorpus(): Promise<void> {
 
   // Embed the full corpus in one call, then partition per tenant so ranking
   // (dense scoring AND BM25 with tenant-local IDF) only ever sees one tenant.
-  const embeddings: number[][] = [];
-  for (let i = 0; i < chunks.length; i += 64) { // Voyage caps inputs per call (128); batch to stay safe as the corpus grows
-    embeddings.push(...(await voyageEmbed(chunks.slice(i, i + 64).map((c) => c.text), "document")));
+  // Embedding isolation (D-046): Voyage vectors for the same text shift slightly with the composition of the call
+  // (cosine 0.9988-0.9999 measured), so embedding every tenant in shared calls lets a new tenant perturb the near-ties of
+  // existing ones. Rule: the two legacy tenants (mro, northwind) are embedded together in ONE call exactly as before
+  // D-044 (keeps D-036/D-041 numbers reproducible, bit-identical); every other tenant is embedded in its own calls
+  // (batches of 64, Voyage caps a call at 128 inputs) and never shares a call with another tenant.
+  const LEGACY_EMBED_GROUP = new Set(["mro", "northwind"]);
+  const embeddings: number[][] = new Array(chunks.length);
+  const groups = new Map<string, number[]>();
+  chunks.forEach((c, i) => {
+    const g = LEGACY_EMBED_GROUP.has(c.tenant) ? "__legacy__" : c.tenant;
+    (groups.get(g) ?? groups.set(g, []).get(g)!).push(i);
+  });
+  for (const [g, idxs] of Array.from(groups.entries())) {
+    const size = g === "__legacy__" ? idxs.length : 64;
+    for (let b = 0; b < idxs.length; b += size) {
+      const part = idxs.slice(b, b + size);
+      const vecs = await voyageEmbed(part.map((i) => chunks[i].text), "document");
+      part.forEach((i, j) => { embeddings[i] = vecs[j]; });
+    }
   }
 
   const tenants = new Map<string, TenantIndex>();
@@ -463,13 +489,13 @@ function toResult(c: Chunk, score: number, expanded?: boolean): RetrievalResult 
 }
 
 /** Pick up to k ranked chunks in rank order, skipping policy chunks beyond the cap (slots go to the next non-policy chunk). */
-function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chunk[], k: number): { idxs: number[]; scores: number[] } {
+function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chunk[], k: number, floor = 0): { idxs: number[]; scores: number[] } {
   const cap = maxPolicyChunks();
   const idxs: number[] = [], scores: number[] = [];
   let pol = 0;
   for (const i of order) {
     if (idxs.length >= k) break;
-    if (chunks[i].type === "policy") { if (pol >= cap) continue; pol++; }
+    if (chunks[i].type === "policy") { if (pol >= cap || scoreOf(i) < floor) continue; pol++; }
     idxs.push(i); scores.push(Math.max(0, scoreOf(i)));
   }
   return { idxs, scores };
@@ -545,7 +571,7 @@ export async function retrieveWithRanker(
     ranked = dense.map((s, i) => ({ i, s })).sort((a, b) => b.s - a.s).map((x) => x.i);
     dense.forEach((v, i) => rawScore.set(i, Math.max(0, v)));
   }
-  const picked = pickRanked(ranked, (i) => rawScore.get(i) ?? 0, index.chunks, k);
+  const picked = pickRanked(ranked, (i) => rawScore.get(i) ?? 0, index.chunks, k, ranker === "bm25" ? 0 : policyMinScore()); // bm25 scores are max-normalised, not cosine: no floor
   const ranked_results = picked.idxs.map((i, r) => toResult(index.chunks[i], Math.round(picked.scores[r] * 10000) / 10000));
   const exp = expansionEnabled(expand);
   return {
@@ -592,7 +618,7 @@ export async function retrieve(query: string, k = 5, tenant?: string, expand?: b
   const fused = rrfFuse(denseRanks.slice(0, 10), bm25Ranks.slice(0, 10));
 
   // Use dense cosine score as the reported score (no reranker)
-  const picked = pickRanked(fused, (i) => denseScores[i], chunks, k); // policy chunks capped (D-045)
+  const picked = pickRanked(fused, (i) => denseScores[i], chunks, k, policyMinScore()); // policy chunks capped (D-045) and floored (D-046)
   const confidence = computeConfidence(picked.scores);
   const results: RetrievalResult[] = picked.idxs.map((i, rank) => toResult(chunks[i], Math.round(picked.scores[rank] * 10000) / 10000));
   const exp = expansionEnabled(expand);

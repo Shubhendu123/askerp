@@ -97,15 +97,16 @@ const SYSTEM_BASE_HARBORLINE = `You are a SQL generator for a DuckDB analytics w
 
 const SYSTEM_RULES_HARBORLINE = `
 RULES:
-1. Return ONLY valid DuckDB SQL — no CTEs unless necessary
+1. Return ONLY valid DuckDB SQL — no CTEs unless needed (see rule 4)
 2. Always qualify every table as harborline.<table_name>
-3. Use harborline.dim_date for calendar logic, joined on the *_date_key integer (YYYYMMDD) columns — never compare date keys to literals except for exact YYYYMMDD equality. The data covers 2025-05-01 to 2026-10-22 (October 2026 is incomplete and not invoiced); "last month" means the last complete month, September 2026, unless the question says otherwise
-4. Assets under custody is a point-in-time balance: sum harborline.pos_daily_position.market_value_usd on ONE date (the latest) — never across dates
-5. Settlement fail rate and settlement rate use only instructions with settlement_status IN ('SETTLED','FAILED'); a settlement is on time when actual_settle_date_key = intended_settle_date_key
-6. LIMIT results to 100 rows maximum
-7. Never use SELECT * — name columns explicitly
-8. Thresholds, targets and criteria (SLA targets, escalation limits, ageing cut-offs, tier definitions) must come from the retrieved policy context; never invent one
-9. If the question cannot be answered from the provided context and this warehouse's data (e.g. trading-desk P&L, headcount, anything outside custody operations; another tenant's data), set "sql" to null and explain why in "reasoning" — do not invent tables or columns
+3. Dates: join harborline.dim_date on the *_date_key columns and use its full_date / year_num / month_num / quarter_num; do date arithmetic on dim_date.full_date. NEVER do arithmetic on YYYYMMDD key integers (no "key - 36500", no "key + 7", no BETWEEN built from key math); comparing a key to a literal is only valid as exact YYYYMMDD equality or a plain range such as >= 20251023. The data covers 2025-05-01 to 2026-10-22 (October 2026 is incomplete and not invoiced); "last month" means the last complete month, September 2026, unless the question says otherwise
+4. NO FAN-OUT: when a question needs measures from two or more fact tables (stl_*, pos_*, cae_*, clt_*, rec_*), aggregate EACH fact table in its own CTE (grouped by the shared key, e.g. client_key or market_key) BEFORE joining the CTEs together or to dimensions. Never join two fact tables row-to-row: that multiplies rows and inflates every count and sum. Joining one fact table to dimensions is fine without a CTE.
+5. Assets under custody is a point-in-time balance: sum harborline.pos_daily_position.market_value_usd on ONE date (the latest) — never across dates
+6. Settlement fail rate and settlement rate use only instructions with settlement_status IN ('SETTLED','FAILED'); a settlement is on time when actual_settle_date_key = intended_settle_date_key
+7. LIMIT results to 100 rows maximum
+8. Never use SELECT * — name columns explicitly
+9. Thresholds, targets and criteria (SLA targets, escalation limits, ageing cut-offs, tier definitions) must come from the retrieved policy context; never invent one
+10. If the question cannot be answered from the provided context and this warehouse's data (e.g. trading-desk P&L, headcount, anything outside custody operations; another tenant's data), set "sql" to null and explain why in "reasoning" — do not invent tables or columns
 
 For sentiment: use the metric's sentiment field from the SEMANTIC LAYER above.
 "positive" = higher is better, "negative" = higher is worse, "none" = directional/neutral.

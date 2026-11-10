@@ -526,3 +526,51 @@ No regression on S02/M08.
 - AUC is $712.2B and the fail rate 3.84% versus the ≈$714B / ≈3.75% in the D-045 brief; both match D-044's own verified numbers, so the brief's figures were approximations.
 - Income on time is 94.99% — a hair under the POL-008 95% target; reclaim deadlines are all 2028+ (D-044).
 - Gate B retrieval verification and the policy-priority fix are recorded in D-045.
+
+### D-046 Part C — verification (30 questions, ground truth first)
+
+**Set.** `benchmark/questions_harborline.json`: 8 simple, 8 medium, 5 hard cross-area (chain 1 counterparty→fails→penalties; chain 2 notice window→missed elections; chain 3 reclaim leakage; plus overdraft-vs-routing and aged-fails-vs-SLA-credits), 5 hybrid policy+data, 4 controls (MRO question under harborline, furniture question, trading-desk P&L, headcount). Ground truth SQL (`benchmark/build_ground_truth_harborline.py`) was hand-written from the policies and DDL, independent of the metric formulas, and executed before any model run; the scorer was self-checked (ground truth as answer → A=3 for all 26; perturbed answers never 3). Conventions: "last month" = September 2026, "today" = 2026-10-22, SLA targets from POL-001 §2 (99/98/97%). Scored with the D-041 rubric (R_recall, R_precision, table coverage, A-score — the D-036 `score_a` reused verbatim) plus policy coverage and citation accuracy. Run through the production path (rrf, k=10, table + policy expansion → `generateSQL` → validator/retry → narrator with policy citations), single run each, no re-runs to improve numbers.
+
+**P04 and P05 are negative tests.** The correct answer to both is *none*: no client ever bears more than USD 50K of penalties in a month (P04), and no client is unprofitable under the POL-010 §6 definition, even per quarter (P05). The data does not exercise those policy thresholds. Scoring: A=3 for valid SQL returning no rows. Both runs pass both (no rows; headlines "No clients exceeded…", "No clients showed negative profitability…").
+
+**Run 0 (first run, shared-batch embeddings).** Mean A 2.62 over 26 answerable (simple 3.00, medium 2.62, hard 2.40, hybrid 2.20); 25/26 valid SQL; controls 4/4; recall 0.99, precision 0.29; 30/30 questions at the 3-policy-chunk cap; 25 narrations cited a policy, all retrieved (accuracy 1.00) but 17 on questions needing no policy; a required policy cited on 5 of 9 questions. MRO regression: set-identical but a near-tie rank swap in S02 (see below).
+
+**Gate 4 finding → embedding isolation fix.** MRO S02/M08 retrieval was not bit-identical to D-044: same chunks, but two near-tied ranks swapped and scores moved ≤0.004. Cause, measured: Voyage vectors for the same text shift with the composition of the embedding call (cosine 0.9988–0.9999 between batchings; identical for identical calls). Adding a tenant therefore perturbed other tenants' near-ties. Fix (Run 1): legacy tenants (mro, northwind) are embedded in ONE call exactly as before D-044; every other tenant is embedded in its own calls (batches of 64) and never shares a call. Verified bit-identical to D-044 (ids, order, type, ranked/expanded flag, scores) for S02 and M08, on both the Run 1 and Run 2 code; zero policy chunks, zero non-MRO chunks; narrator prompt for tenants without policies is byte-identical to pre-D-045. MRO answers A=3 (S02 44.02, M08 top supplier matches ground truth).
+
+**Run 2 changes (harborline-scoped).** (a) relevance floor 0.50 (dense cosine) on *ranked* policy chunks, `RETRIEVAL_POLICY_MIN_SCORE`; policies pulled in through `policy_refs` are never filtered. Calibrated on 10 questions outside the benchmark (top ranked policy chunk 0.53–0.70 on policy-seeking, 0.29–0.52 on data-only). (b) narrator rule: cite a policy only when a specific claim depends on that rule; the rule is appended to the prompt only when policy chunks are supplied. (c) harborline SQL rules: aggregate each fact table in its own CTE before joining; no arithmetic on YYYYMMDD keys (join dim_date).
+
+**Run 1 vs Run 2 (identical questions, same ground truth).**
+
+| | Run 1 | Run 2 |
+|---|---|---|
+| R_recall / R_precision (26) | 0.99 / 0.29 | 0.99 / 0.29 |
+| table / policy coverage | 0.99 / 1.00 | 0.99 / 1.00 |
+| policy chunks per question: mean (min–max) | 3.00 (3–3) | 2.93 (1–3) |
+| …on the 9 needing a policy / the 17 not | 3.00 / 3.00 | 3.00 / 2.88 |
+| mean A: simple / medium / hard / hybrid | 3.00 / 3.00 / 2.40 / 2.40 | 3.00 / 3.00 / 2.40 / 2.40 |
+| mean A all 26; valid SQL | 2.77; 26/26 | 2.77; 26/26 |
+| answers citing a policy (of 30) | 26 | 22 |
+| citation accuracy (cited ⊆ retrieved); wrong | 0.98; 1 | 1.00; 0 |
+| citing answers on questions needing no policy | 17 | 15 |
+| required policy cited (of 9) | 6 | 5 |
+| S01 (AUC) still cites a policy | yes (POL-010 §3) | yes (POL-010 §3) |
+| P04 / P05 negative tests | pass / pass | pass / pass |
+| controls | 4/4 | 4/4 |
+
+No per-question A changed between Run 1 and Run 2. **The Run 2 fixes did not meaningfully work**, and the reasons are specific:
+- *(a) Floor:* 22 of 26 answerable questions still carry 3 policy chunks, because most are pulled in by `policy_refs` of whichever of the 10 retrieved metrics reference policies (marginal metrics included) — which the floor deliberately does not touch. Only ranked-only chunks were filtered (M06 now has 1). S01 still gets a ranked POL-010#3 above the floor.
+- *(b) Narrator rule:* citing answers fell 26→22 but the S01 narration still draws an unsupported fee-tier inference from POL-010 §3 ("lowest tier 0.45 bps"), and 15 citing answers are on questions that need no policy. Haiku does not reliably honour a prose restraint when the policy text is in its context.
+- *(c) SQL rules:* ignored. H05 and H02 produce the same direct fact-to-fact joins (no CTE) and the same inflated results (H05: 169,915 aged fails vs 1,999; $29B vs $392K SLA credits). A prose rule is not a control.
+- *Noise:* Run 0 → Run 1 changed nothing relevant to SQL generation yet moved mean A 2.62→2.77 (M03 failed with a binder error in Run 0 and passed in Runs 1–2; P02 went 1→2). **Single-run differences of ±1 question are within run-to-run noise**; none of the above should be read as a measured improvement or regression without ≥3 runs.
+
+**Persistent failures (all three runs).** H05 (fan-out, A=1), H02 (milder fan-out, A=2), P03 (chase-priority logic differs from ground truth, A=1), P02 (A=1–2: "trailing 12 months" built with integer arithmetic on YYYYMMDD keys and OR instead of AND for the two tier-D criteria).
+
+**Follow-ups, not done (hypotheses, untested).**
+1. Limit `policy_refs` expansion to the top few ranked metrics (or require the metric to be the primary match), so marginal metrics stop filling the cap; keep the floor for ranked policies.
+2. Enforce no-fan-out mechanically instead of by prose: a static check in the D-042 validator (two fact tables joined row-to-row without prior aggregation → classified error carried into the retry), plus a date-key-arithmetic check.
+3. Narrator citations: post-filter to policy chunks the answer demonstrably needs (e.g. referenced by the used metric, or named in the question) rather than all retrieved; or a second pass.
+4. Calibrate the floor against more questions; it is specific to voyage-3-lite cosine on this corpus.
+5. Reclaim deadlines (all 2028+), service-request SLA breach rate (32%) and the empty P04/P05 answers mean three policy thresholds are unexercised by the data; consider an additive patch (D-034 style) so the hybrid tests have positive cases.
+6. Run ≥3 repetitions per configuration before drawing conclusions.
+
+**Artifacts.** `benchmark/runs_harborline/` holds Run 0 (`harborline_2026-…5130`), Run 1 (`harborline_run1_…`), Run 2 (`harborline_run2_…`) and the MRO regression runs; `python3 benchmark/score_harborline.py --compare <run1> <run2>` reproduces the table.

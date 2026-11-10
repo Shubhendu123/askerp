@@ -1,0 +1,593 @@
+{
+ "S01": {
+  "sql": "SELECT ROUND(SUM(market_value_usd),2) FROM harborline.pos_daily_position WHERE position_date_key=(SELECT MAX(position_date_key) FROM harborline.pos_daily_position)",
+  "result": [
+   [
+    712173778392.28
+   ]
+  ]
+ },
+ "S02": {
+  "sql": "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE settlement_status='FAILED')/COUNT(*),2) FROM harborline.stl_trade_instruction WHERE settlement_status IN ('SETTLED','FAILED')",
+  "result": [
+   [
+    3.84
+   ]
+  ]
+ },
+ "S03": {
+  "sql": "SELECT ROUND(SUM(penalty_amount_usd),2) FROM harborline.stl_fail_penalty",
+  "result": [
+   [
+    1431658.69
+   ]
+  ]
+ },
+ "S04": {
+  "sql": "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE reclaim_filed)/COUNT(*),2) FROM harborline.cae_income_payment WHERE reclaim_eligible",
+  "result": [
+   [
+    59.88
+   ]
+  ]
+ },
+ "S05": {
+  "sql": "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE missed_deadline)/COUNT(*),2) FROM harborline.cae_client_election",
+  "result": [
+   [
+    1.65
+   ]
+  ]
+ },
+ "S06": {
+  "sql": "SELECT ROUND(SUM(funding_cost_usd),2) FROM harborline.pos_cash_balance",
+  "result": [
+   [
+    870611.08
+   ]
+  ]
+ },
+ "S07": {
+  "sql": "SELECT ROUND(SUM(invoiced_amount_usd),2) FROM harborline.clt_fee_invoice",
+  "result": [
+   [
+    193273918.36
+   ]
+  ]
+ },
+ "S08": {
+  "sql": "SELECT ROUND(SUM(settlement_amount_usd),2) FROM harborline.stl_trade_instruction WHERE settlement_status='PENDING' OR (settlement_status='FAILED' AND actual_settle_date_key IS NULL)",
+  "result": [
+   [
+    1846552031.69
+   ]
+  ]
+ },
+ "M01": {
+  "sql": "SELECT cp.reliability_tier, ROUND(100.0*COUNT(*) FILTER (WHERE i.settlement_status='FAILED')/COUNT(*),2) AS fail_rate_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp USING(counterparty_key) WHERE i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1 ORDER BY 1",
+  "result": [
+   [
+    "A",
+    1.02
+   ],
+   [
+    "B",
+    2.45
+   ],
+   [
+    "C",
+    7.03
+   ],
+   [
+    "D",
+    13.95
+   ]
+  ]
+ },
+ "M02": {
+  "sql": "SELECT m.market_code, ROUND(SUM(p.penalty_amount_usd),2) FROM harborline.stl_fail_penalty p JOIN harborline.dim_market m USING(market_key) GROUP BY 1 ORDER BY 2 DESC",
+  "result": [
+   [
+    "GB",
+    356757.74
+   ],
+   [
+    "IT",
+    345029.91
+   ],
+   [
+    "DE",
+    303052.7
+   ],
+   [
+    "FR",
+    283306.7
+   ],
+   [
+    "NL",
+    143511.64
+   ]
+  ]
+ },
+ "M03": {
+  "sql": "SELECT ROUND(100.0*COUNT(*) FILTER (WHERE x.missed_deadline)/COUNT(*),2) AS missed_rate_pct FROM harborline.cae_client_election x JOIN harborline.cae_event e USING(event_key) GROUP BY CASE WHEN e.notice_window_days<=2 THEN 1 WHEN e.notice_window_days<=4 THEN 2 ELSE 3 END ORDER BY CASE WHEN e.notice_window_days<=2 THEN 1 WHEN e.notice_window_days<=4 THEN 2 ELSE 3 END",
+  "result": [
+   [
+    9.43
+   ],
+   [
+    2.39
+   ],
+   [
+    0.27
+   ]
+  ]
+ },
+ "M04": {
+  "sql": "SELECT waiver_reason, ROUND(SUM(billable_amount_usd-invoiced_amount_usd),2) FROM harborline.clt_fee_invoice WHERE waiver_reason IS NOT NULL GROUP BY 1 ORDER BY 2 DESC",
+  "result": [
+   [
+    "SLA_CREDIT",
+    2902923.93
+   ],
+   [
+    "RELATIONSHIP_DISCOUNT",
+    1204382.57
+   ]
+  ]
+ },
+ "M05": {
+  "sql": "SELECT m.market_code, ROUND(SUM(ip.reclaim_amount_usd),2) FROM harborline.cae_income_payment ip JOIN harborline.dim_market m USING(market_key) WHERE ip.reclaim_eligible AND NOT ip.reclaim_filed GROUP BY 1 ORDER BY 2 DESC LIMIT 5",
+  "result": [
+   [
+    "CH",
+    175335967.99
+   ],
+   [
+    "US",
+    144394658.13
+   ],
+   [
+    "DE",
+    70710051.71
+   ],
+   [
+    "FR",
+    58655091.84
+   ],
+   [
+    "IT",
+    32181254.05
+   ]
+  ]
+ },
+ "M06": {
+  "sql": "SELECT c.client_segment, ROUND(SUM(p.market_value_usd),2) FROM harborline.pos_daily_position p JOIN harborline.dim_client c USING(client_key) WHERE p.position_date_key=(SELECT MAX(position_date_key) FROM harborline.pos_daily_position) GROUP BY 1 ORDER BY 2 DESC",
+  "result": [
+   [
+    "ASSET_MANAGER",
+    226216280328.27
+   ],
+   [
+    "PENSION_FUND",
+    166084698670.42
+   ],
+   [
+    "SOVEREIGN_WEALTH",
+    139387362827.21
+   ],
+   [
+    "INSURANCE",
+    112235505381.55
+   ],
+   [
+    "HEDGE_FUND",
+    68249931184.83
+   ]
+  ]
+ },
+ "M07": {
+  "sql": "SELECT s.security_type, ROUND(100.0*COUNT(*) FILTER (WHERE i.settlement_status='FAILED')/COUNT(*),2) FROM harborline.stl_trade_instruction i JOIN harborline.dim_security s USING(security_key) WHERE i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1 ORDER BY 2 DESC",
+  "result": [
+   [
+    "CORP_BOND",
+    8.75
+   ],
+   [
+    "EQUITY",
+    3.54
+   ],
+   [
+    "ETF",
+    2.78
+   ],
+   [
+    "MMI",
+    1.45
+   ],
+   [
+    "GOVT_BOND",
+    1.33
+   ]
+  ]
+ },
+ "M08": {
+  "sql": "SELECT c.client_name, COUNT(*) AS overdraft_days FROM harborline.pos_cash_balance b JOIN harborline.dim_client c USING(client_key) WHERE b.is_overdrawn GROUP BY 1 ORDER BY 2 DESC LIMIT 5",
+  "result": [
+   [
+    "Kestrel Capital Partners",
+    704
+   ],
+   [
+    "Eastgate Capital Partners",
+    621
+   ],
+   [
+    "Orchard Capital Partners",
+    493
+   ],
+   [
+    "Whitcombe Capital Partners",
+    376
+   ],
+   [
+    "Ashford Capital Partners",
+    324
+   ]
+  ]
+ },
+ "H01": {
+  "sql": "WITH ins AS (SELECT cp.reliability_tier t, COUNT(*) n, COUNT(*) FILTER (WHERE i.settlement_status='FAILED') f FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp USING(counterparty_key) WHERE i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1), pen AS (SELECT cp.reliability_tier t, SUM(p.penalty_amount_usd) a FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp USING(counterparty_key) GROUP BY 1) SELECT ins.t, ROUND(100.0*ins.f/ins.n,2) AS fail_rate_pct, ROUND(pen.a,2) AS penalties_usd, ROUND(pen.a*1000.0/ins.n,0) AS penalties_per_1000 FROM ins JOIN pen USING(t) ORDER BY 1",
+  "result": [
+   [
+    "A",
+    1.02,
+    72674.58,
+    321.0
+   ],
+   [
+    "B",
+    2.45,
+    159224.45,
+    986.0
+   ],
+   [
+    "C",
+    7.03,
+    393099.95,
+    4315.0
+   ],
+   [
+    "D",
+    13.95,
+    806659.71,
+    14235.0
+   ]
+  ]
+ },
+ "H02": {
+  "sql": "WITH ev AS (SELECT e.market_key, ROUND(100.0*COUNT(*) FILTER (WHERE e.notice_window_days<=2)/COUNT(*),2) AS short_notice_pct FROM harborline.cae_event e WHERE e.is_voluntary GROUP BY 1), el AS (SELECT e.market_key, ROUND(100.0*COUNT(*) FILTER (WHERE x.missed_deadline)/COUNT(*),2) AS missed_pct FROM harborline.cae_client_election x JOIN harborline.cae_event e USING(event_key) GROUP BY 1) SELECT m.market_code, ev.short_notice_pct, el.missed_pct FROM ev JOIN el USING(market_key) JOIN harborline.dim_market m USING(market_key) ORDER BY ev.short_notice_pct DESC LIMIT 5",
+  "result": [
+   [
+    "HK",
+    52.38,
+    5.45
+   ],
+   [
+    "JP",
+    45.45,
+    7.43
+   ],
+   [
+    "IT",
+    38.71,
+    2.35
+   ],
+   [
+    "GB",
+    6.96,
+    0.54
+   ],
+   [
+    "CH",
+    6.38,
+    1.54
+   ]
+  ]
+ },
+ "H03": {
+  "sql": "SELECT m.market_code, ROUND(SUM(ip.reclaim_amount_usd) FILTER (WHERE NOT ip.reclaim_filed),2) AS unfiled_usd, m.tax_reclaim_complexity, ROUND(100.0*COUNT(*) FILTER (WHERE ip.reclaim_filed)/COUNT(*),2) AS filed_rate_pct FROM harborline.cae_income_payment ip JOIN harborline.dim_market m USING(market_key) WHERE ip.reclaim_eligible GROUP BY m.market_code, m.tax_reclaim_complexity ORDER BY 2 DESC LIMIT 5",
+  "result": [
+   [
+    "CH",
+    175335967.99,
+    "HIGH",
+    18.94
+   ],
+   [
+    "US",
+    144394658.13,
+    "LOW",
+    70.42
+   ],
+   [
+    "DE",
+    70710051.71,
+    "MEDIUM",
+    51.34
+   ],
+   [
+    "FR",
+    58655091.84,
+    "HIGH",
+    20.0
+   ],
+   [
+    "IT",
+    32181254.05,
+    "HIGH",
+    22.39
+   ]
+  ]
+ },
+ "H04": {
+  "sql": "WITH od AS (SELECT client_key, COUNT(*) AS overdraft_days FROM harborline.pos_cash_balance WHERE is_overdrawn GROUP BY 1), cd AS (SELECT i.client_key, ROUND(100.0*COUNT(*) FILTER (WHERE cp.reliability_tier IN ('C','D'))/COUNT(*),2) AS cd_share_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp USING(counterparty_key) GROUP BY 1) SELECT c.client_name, od.overdraft_days, cd.cd_share_pct FROM od JOIN cd USING(client_key) JOIN harborline.dim_client c USING(client_key) ORDER BY od.overdraft_days DESC LIMIT 10",
+  "result": [
+   [
+    "Kestrel Capital Partners",
+    704,
+    51.75
+   ],
+   [
+    "Eastgate Capital Partners",
+    621,
+    52.79
+   ],
+   [
+    "Orchard Capital Partners",
+    493,
+    45.77
+   ],
+   [
+    "Whitcombe Capital Partners",
+    376,
+    49.71
+   ],
+   [
+    "Ashford Capital Partners",
+    324,
+    38.03
+   ],
+   [
+    "Valmont Capital Partners",
+    300,
+    39.72
+   ],
+   [
+    "Greystone Capital Partners",
+    286,
+    40.35
+   ],
+   [
+    "Clearwater Asset Management",
+    279,
+    30.65
+   ],
+   [
+    "Highmoor Asset Management",
+    279,
+    24.44
+   ],
+   [
+    "Cobalt Asset Management",
+    237,
+    24.69
+   ]
+  ]
+ },
+ "H05": {
+  "sql": "WITH ag AS (SELECT client_key, COUNT(*) AS aged_fails FROM harborline.stl_trade_instruction WHERE settlement_status='FAILED' AND days_failed>=5 GROUP BY 1), sc AS (SELECT client_key, SUM(billable_amount_usd-invoiced_amount_usd) AS sla_credits FROM harborline.clt_fee_invoice WHERE waiver_reason='SLA_CREDIT' GROUP BY 1) SELECT c.client_name, ag.aged_fails, c.sla_tier, ROUND(COALESCE(sc.sla_credits,0),2) AS sla_credits_usd FROM ag JOIN harborline.dim_client c USING(client_key) LEFT JOIN sc USING(client_key) ORDER BY ag.aged_fails DESC LIMIT 10",
+  "result": [
+   [
+    "Eastgate Capital Partners",
+    1999,
+    "PLATINUM",
+    392017.49
+   ],
+   [
+    "Kestrel Capital Partners",
+    739,
+    "GOLD",
+    126590.69
+   ],
+   [
+    "Orchard Capital Partners",
+    451,
+    "SILVER",
+    92996.63
+   ],
+   [
+    "Union Crest Asset Management",
+    231,
+    "PLATINUM",
+    218101.35
+   ],
+   [
+    "Clearwater Asset Management",
+    228,
+    "GOLD",
+    183510.12
+   ],
+   [
+    "Ashford Capital Partners",
+    210,
+    "SILVER",
+    26468.65
+   ],
+   [
+    "Whitcombe Capital Partners",
+    197,
+    "SILVER",
+    16945.94
+   ],
+   [
+    "Highmoor Asset Management",
+    189,
+    "GOLD",
+    126330.52
+   ],
+   [
+    "Pinnacle Asset Management",
+    187,
+    "PLATINUM",
+    294077.48
+   ],
+   [
+    "Oakmont Asset Management",
+    171,
+    "GOLD",
+    114737.86
+   ]
+  ]
+ },
+ "P01": {
+  "sql": "SELECT c.client_name, ROUND(100.0*COUNT(*) FILTER (WHERE i.actual_settle_date_key=i.intended_settle_date_key)/COUNT(*),2) AS settlement_rate_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c USING(client_key) JOIN harborline.dim_date d ON d.date_key=i.intended_settle_date_key WHERE c.sla_tier='PLATINUM' AND d.year_num=2026 AND d.month_num=9 AND i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1 HAVING 100.0*COUNT(*) FILTER (WHERE i.actual_settle_date_key=i.intended_settle_date_key)/COUNT(*) < 99.0 ORDER BY 2",
+  "result": [
+   [
+    "Eastgate Capital Partners",
+    93.42
+   ],
+   [
+    "Union Crest Asset Management",
+    96.82
+   ],
+   [
+    "Beacon Insurance Group",
+    97.1
+   ],
+   [
+    "Pinnacle Asset Management",
+    97.13
+   ],
+   [
+    "Vantage Sovereign Investment Authority",
+    97.64
+   ],
+   [
+    "Northgate Pension Fund",
+    97.74
+   ],
+   [
+    "Westmark Sovereign Investment Authority",
+    98.34
+   ],
+   [
+    "Montclair Pension Fund",
+    98.34
+   ]
+  ]
+ },
+ "P02": {
+  "sql": "SELECT cp.counterparty_name, ROUND(100.0*COUNT(*) FILTER (WHERE i.settlement_status='FAILED')/COUNT(*),2) AS fail_rate_pct, ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status='FAILED'),2) AS avg_days_failed FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp USING(counterparty_key) WHERE i.settlement_status IN ('SETTLED','FAILED') AND i.intended_settle_date_key>20251022 AND COALESCE(i.fail_reason_code,'')<>'MARKET_RESTRICTION' GROUP BY 1 HAVING 100.0*COUNT(*) FILTER (WHERE i.settlement_status='FAILED')/COUNT(*)>10.0 AND AVG(i.days_failed) FILTER (WHERE i.settlement_status='FAILED')>4.0 ORDER BY 2 DESC",
+  "result": [
+   [
+    "Jedburgh Colt Securities",
+    13.6,
+    6.67
+   ],
+   [
+    "Lyndhurst Boyd Trust",
+    13.23,
+    7.39
+   ],
+   [
+    "Nantwich Strand Bank",
+    12.99,
+    6.53
+   ],
+   [
+    "Ilkley Marr Trust",
+    12.94,
+    6.44
+   ],
+   [
+    "Hawick Dunn Securities",
+    12.82,
+    6.72
+   ],
+   [
+    "Kendal Prowse Securities",
+    12.4,
+    6.75
+   ],
+   [
+    "Malvern Ley Bank",
+    12.31,
+    7.0
+   ]
+  ]
+ },
+ "P03": {
+  "sql": "WITH openf AS (SELECT * FROM harborline.stl_trade_instruction WHERE settlement_status='FAILED' AND actual_settle_date_key IS NULL), expo AS (SELECT instruction_key, MAX(penalty_amount_usd) AS daily_penalty FROM harborline.stl_fail_penalty GROUP BY 1), od AS (SELECT DISTINCT client_key FROM harborline.pos_cash_balance WHERE is_overdrawn AND balance_date_key=(SELECT MAX(balance_date_key) FROM harborline.pos_cash_balance)) SELECT o.instruction_ref, CASE WHEN COALESCE(e.daily_penalty,0)>500 THEN 1 WHEN o.direction='RECEIVE' AND od.client_key IS NOT NULL THEN 2 WHEN c.sla_tier='PLATINUM' THEN 3 ELSE 4 END AS priority, ROUND(o.settlement_amount_usd,2) AS settlement_amount_usd FROM openf o JOIN harborline.dim_client c USING(client_key) LEFT JOIN expo e USING(instruction_key) LEFT JOIN od ON od.client_key=o.client_key ORDER BY 2, o.settlement_amount_usd DESC LIMIT 10",
+  "result": [
+   [
+    "INS-0525597",
+    1,
+    6254113.4
+   ],
+   [
+    "INS-0536103",
+    2,
+    3718613.16
+   ],
+   [
+    "INS-0533038",
+    2,
+    3225427.65
+   ],
+   [
+    "INS-0528496",
+    2,
+    2424014.99
+   ],
+   [
+    "INS-0531046",
+    2,
+    2145928.0
+   ],
+   [
+    "INS-0533474",
+    2,
+    2097498.03
+   ],
+   [
+    "INS-0537559",
+    2,
+    1688197.12
+   ],
+   [
+    "INS-0535100",
+    2,
+    1387753.18
+   ],
+   [
+    "INS-0526519",
+    2,
+    1200409.22
+   ],
+   [
+    "INS-0523677",
+    2,
+    1137252.24
+   ]
+  ]
+ },
+ "P04": {
+  "sql": "SELECT c.client_name, d.year_num, d.month_num, ROUND(SUM(p.penalty_amount_usd),2) AS penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_client c USING(client_key) JOIN harborline.dim_date d ON d.date_key=p.penalty_date_key WHERE p.bearer='CLIENT' GROUP BY 1,2,3 HAVING SUM(p.penalty_amount_usd)>50000 ORDER BY 4 DESC",
+  "result": []
+ },
+ "P05": {
+  "sql": "WITH rev AS (SELECT client_key, SUM(invoiced_amount_usd) inv, SUM(billable_amount_usd-invoiced_amount_usd) FILTER (WHERE waiver_reason='SLA_CREDIT') sla, SUM(invoiced_amount_usd) FILTER (WHERE fee_type='OVERDRAFT') odf FROM harborline.clt_fee_invoice GROUP BY 1), pen AS (SELECT client_key, SUM(penalty_amount_usd) p FROM harborline.stl_fail_penalty WHERE bearer='HARBORLINE' GROUP BY 1), fund AS (SELECT client_key, SUM(funding_cost_usd) f FROM harborline.pos_cash_balance GROUP BY 1), svc AS (SELECT client_key, SUM(analyst_hours)*85 s FROM harborline.clt_service_request GROUP BY 1) SELECT c.client_name, ROUND(rev.inv-COALESCE(pen.p,0)-GREATEST(COALESCE(fund.f,0)-COALESCE(rev.odf,0),0)-COALESCE(rev.sla,0)-COALESCE(svc.s,0),2) AS profitability_usd FROM harborline.dim_client c JOIN rev USING(client_key) LEFT JOIN pen USING(client_key) LEFT JOIN fund USING(client_key) LEFT JOIN svc USING(client_key) WHERE rev.inv-COALESCE(pen.p,0)-GREATEST(COALESCE(fund.f,0)-COALESCE(rev.odf,0),0)-COALESCE(rev.sla,0)-COALESCE(svc.s,0) < 0 ORDER BY 2",
+  "result": []
+ }
+}

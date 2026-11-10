@@ -1,0 +1,459 @@
+{
+ "_comment": "D-046 Part C: 30 Harborline questions. Ground truth in ground_truth_harborline.json (built and executed before any model run). expected.policies = required policy chunk ids for the policy-coverage score. 'Last month' = September 2026; 'today' = 2026-10-22.",
+ "top_k": 10,
+ "tenant": "harborline",
+ "questions": [
+  {
+   "id": "S01",
+   "tier": "S",
+   "question": "What are our total assets under custody?",
+   "expected": {
+    "primary": [
+     "harborline:assets_under_custody_usd"
+    ],
+    "tables": [
+     "harborline:pos_daily_position"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S02",
+   "tier": "S",
+   "question": "What is our overall settlement fail rate?",
+   "expected": {
+    "primary": [
+     "harborline:settlement_fail_rate_pct"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S03",
+   "tier": "S",
+   "question": "What are our total CSDR and CREST penalties?",
+   "expected": {
+    "primary": [
+     "harborline:penalty_total_usd"
+    ],
+    "tables": [
+     "harborline:stl_fail_penalty"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S04",
+   "tier": "S",
+   "question": "What percentage of eligible tax reclaims do we actually file?",
+   "expected": {
+    "primary": [
+     "harborline:reclaim_filed_rate_pct"
+    ],
+    "tables": [
+     "harborline:cae_income_payment"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S05",
+   "tier": "S",
+   "question": "What is our missed election rate?",
+   "expected": {
+    "primary": [
+     "harborline:missed_election_rate_pct"
+    ],
+    "tables": [
+     "harborline:cae_client_election"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S06",
+   "tier": "S",
+   "question": "What is the total overnight funding cost of client overdrafts?",
+   "expected": {
+    "primary": [
+     "harborline:overdraft_funding_cost_usd"
+    ],
+    "tables": [
+     "harborline:pos_cash_balance"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S07",
+   "tier": "S",
+   "question": "What is our total invoiced revenue?",
+   "expected": {
+    "primary": [
+     "harborline:invoiced_revenue_usd"
+    ],
+    "tables": [
+     "harborline:clt_fee_invoice"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "S08",
+   "tier": "S",
+   "question": "What value of settlements is currently pending or still open?",
+   "expected": {
+    "primary": [
+     "harborline:pending_settlement_value_usd"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M01",
+   "tier": "M",
+   "question": "What is the settlement fail rate by counterparty reliability tier?",
+   "expected": {
+    "primary": [
+     "harborline:fail_rate_by_counterparty_tier"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_counterparty"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M02",
+   "tier": "M",
+   "question": "How much in penalties did each market incur?",
+   "expected": {
+    "primary": [
+     "harborline:penalty_total_usd"
+    ],
+    "tables": [
+     "harborline:stl_fail_penalty",
+     "harborline:dim_market"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M03",
+   "tier": "M",
+   "question": "What is the missed election rate for short-notice events (2 days or fewer), medium notice (3 to 4 days) and long notice (5 days or more)?",
+   "expected": {
+    "primary": [
+     "harborline:missed_election_rate_pct"
+    ],
+    "tables": [
+     "harborline:cae_client_election",
+     "harborline:cae_event"
+    ],
+    "policies": [
+     "harborline:POL-004#5"
+    ]
+   }
+  },
+  {
+   "id": "M04",
+   "tier": "M",
+   "question": "How much revenue have we foregone, broken down by waiver reason?",
+   "expected": {
+    "primary": [
+     "harborline:revenue_foregone_usd"
+    ],
+    "tables": [
+     "harborline:clt_fee_invoice"
+    ],
+    "policies": [
+     "harborline:POL-010#5"
+    ]
+   }
+  },
+  {
+   "id": "M05",
+   "tier": "M",
+   "question": "Which 5 markets have the most unfiled tax reclaim value?",
+   "expected": {
+    "primary": [
+     "harborline:unfiled_reclaim_value_usd"
+    ],
+    "tables": [
+     "harborline:cae_income_payment",
+     "harborline:dim_market"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M06",
+   "tier": "M",
+   "question": "What are our assets under custody by client segment?",
+   "expected": {
+    "primary": [
+     "harborline:assets_under_custody_usd"
+    ],
+    "tables": [
+     "harborline:pos_daily_position",
+     "harborline:dim_client"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M07",
+   "tier": "M",
+   "question": "What is the settlement fail rate by security type?",
+   "expected": {
+    "primary": [
+     "harborline:settlement_fail_rate_pct"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_security"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "M08",
+   "tier": "M",
+   "question": "Which 5 clients have the most overdraft days?",
+   "expected": {
+    "primary": [
+     "harborline:overdraft_days"
+    ],
+    "tables": [
+     "harborline:pos_cash_balance",
+     "harborline:dim_client"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "H01",
+   "tier": "H",
+   "question": "For each counterparty reliability tier, show the settlement fail rate, total penalties and penalties per 1,000 instructions.",
+   "expected": {
+    "primary": [
+     "harborline:fail_rate_by_counterparty_tier",
+     "harborline:penalty_total_usd"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:stl_fail_penalty",
+     "harborline:dim_counterparty"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "H02",
+   "tier": "H",
+   "question": "Which 5 markets have the highest share of short-notice voluntary events (2 days or fewer), and what is the missed election rate in each?",
+   "expected": {
+    "primary": [
+     "harborline:short_notice_event_share_pct",
+     "harborline:missed_election_rate_pct"
+    ],
+    "tables": [
+     "harborline:cae_event",
+     "harborline:cae_client_election",
+     "harborline:dim_market"
+    ],
+    "policies": [
+     "harborline:POL-004#5"
+    ]
+   }
+  },
+  {
+   "id": "H03",
+   "tier": "H",
+   "question": "Which 5 markets lose the most to unfiled tax reclaims, and what are each market's reclaim complexity and filing rate?",
+   "expected": {
+    "primary": [
+     "harborline:unfiled_reclaim_value_usd",
+     "harborline:reclaim_filed_rate_pct"
+    ],
+    "tables": [
+     "harborline:cae_income_payment",
+     "harborline:dim_market"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "H04",
+   "tier": "H",
+   "question": "For the 10 clients with the most overdraft days, what share of their settlement instructions are with tier C or D counterparties?",
+   "expected": {
+    "primary": [
+     "harborline:overdraft_days",
+     "harborline:fail_rate_by_counterparty_tier"
+    ],
+    "tables": [
+     "harborline:pos_cash_balance",
+     "harborline:stl_trade_instruction",
+     "harborline:dim_counterparty",
+     "harborline:dim_client"
+    ],
+    "policies": []
+   }
+  },
+  {
+   "id": "H05",
+   "tier": "H",
+   "question": "For the 10 clients with the most aged fails (5 or more days), show their SLA tier and the SLA credits we have given them.",
+   "expected": {
+    "primary": [
+     "harborline:aged_fails_count",
+     "harborline:revenue_foregone_usd"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:clt_fee_invoice",
+     "harborline:dim_client"
+    ],
+    "policies": [
+     "harborline:POL-006#3"
+    ]
+   }
+  },
+  {
+   "id": "P01",
+   "tier": "P",
+   "question": "Which PLATINUM clients missed their settlement SLA target last month?",
+   "expected": {
+    "primary": [
+     "harborline:client_sla_settlement_compliance"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_client",
+     "harborline:dim_date"
+    ],
+    "policies": [
+     "harborline:POL-001#2"
+    ]
+   }
+  },
+  {
+   "id": "P02",
+   "tier": "P",
+   "question": "Which counterparties meet the tier D criteria?",
+   "expected": {
+    "primary": [
+     "harborline:fail_rate_by_counterparty_tier"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_counterparty"
+    ],
+    "policies": [
+     "harborline:POL-007#2"
+    ]
+   }
+  },
+  {
+   "id": "P03",
+   "tier": "P",
+   "question": "Which fails should we chase first today, per our prioritisation rules?",
+   "expected": {
+    "primary": [],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:stl_fail_penalty",
+     "harborline:dim_client",
+     "harborline:pos_cash_balance"
+    ],
+    "policies": [
+     "harborline:POL-006#4"
+    ]
+   }
+  },
+  {
+   "id": "P04",
+   "tier": "P",
+   "question": "Which clients exceeded the USD 50K penalty escalation threshold in a month?",
+   "expected": {
+    "primary": [
+     "harborline:penalty_total_usd"
+    ],
+    "tables": [
+     "harborline:stl_fail_penalty",
+     "harborline:dim_client",
+     "harborline:dim_date"
+    ],
+    "policies": [
+     "harborline:POL-002#7"
+    ]
+   }
+  },
+  {
+   "id": "P05",
+   "tier": "P",
+   "question": "Which clients had negative profitability under our cost-to-serve definition?",
+   "expected": {
+    "primary": [
+     "harborline:client_profitability_usd"
+    ],
+    "tables": [
+     "harborline:dim_client",
+     "harborline:clt_fee_invoice",
+     "harborline:stl_fail_penalty",
+     "harborline:pos_cash_balance",
+     "harborline:clt_service_request"
+    ],
+    "policies": [
+     "harborline:POL-010#6"
+    ]
+   }
+  },
+  {
+   "id": "C01",
+   "tier": "C",
+   "question": "What is our current DSO?",
+   "control": {
+    "kind": "cross_tenant",
+    "forbidden_prefix": "mro:",
+    "expectation": "zero mro chunks retrieved; decline (no receivables/payment data)"
+   }
+  },
+  {
+   "id": "C02",
+   "tier": "C",
+   "question": "What is our best-selling furniture category by revenue?",
+   "control": {
+    "kind": "cross_tenant",
+    "forbidden_prefix": "northwind:",
+    "expectation": "zero northwind chunks retrieved; decline"
+   }
+  },
+  {
+   "id": "C03",
+   "tier": "C",
+   "question": "What is our trading desk's P&L?",
+   "control": {
+    "kind": "decline",
+    "expectation": "decline - no trading data"
+   }
+  },
+  {
+   "id": "C04",
+   "tier": "C",
+   "question": "What is our employee headcount?",
+   "control": {
+    "kind": "decline",
+    "expectation": "decline - no HR data"
+   }
+  }
+ ]
+}

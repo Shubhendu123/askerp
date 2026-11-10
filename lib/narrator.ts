@@ -5,9 +5,13 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // D-038 B1: voice rules that make narration read like an analyst wrote it
 // for a CFO, not like a script describing a dataset.
-function buildSystem(tenant: string): string {
+// D-046: the policy-citation rule is appended only when policy chunks were retrieved, so a tenant without policies (mro, northwind)
+// gets a narrator prompt byte-identical to the pre-D-045 one.
+const POLICY_RULE = `- POLICY CITATIONS: if a "Policy rules retrieved" section is provided, cite a policy ONLY when a specific claim in your narrative depends on that rule (a threshold, target, criterion or procedure it states, e.g. "below the 99.0% PLATINUM target (POL-001 §2)"). Do not cite to add background, and do not use a retrieved policy to make claims the question and the data do not call for - if the answer is just a number or a ranking, say it without policy commentary. Cite in the form (POL-001 §2), using exactly the label given. Never cite a policy that is not listed in that section, and never cite when no such section is provided.`;
+
+function buildSystem(tenant: string, withPolicies = false): string {
   const company = getTenantConfig(tenant).llmDescriptor;
-  return `You are a concise data analyst narrator for ${company}.
+  const base = `You are a concise data analyst narrator for ${company}.
 You receive a business question, the SQL result, and metric metadata. Write a tight, factual interpretation.
 
 Rules:
@@ -26,11 +30,11 @@ Rules:
     GOOD: "7 suppliers average 14+ late days yet are paid faster than the 39-day company average" — reports only the group above the gap
   If you scan the column and the values decline smoothly with no gap that stands out, the set is genuinely homogeneous — report the full count, don't invent a break that isn't there.
 - CONSTANT COLUMNS: if a column's value is identical across every row (e.g. a repeated company-wide average), state it once in prose ("company-wide DPO is 39 days") rather than treating it as a per-row finding.
-- POLICY CITATIONS: if (and only if) a "Policy rules retrieved" section is provided and your claim depends on one of those rules, cite it inline in the form (POL-001 §2), using exactly the citation label given. Never cite a policy that is not listed in that section, and never cite when no such section is provided.
 - Output ONLY valid JSON, no markdown.
 
 Output format:
 {"headline": "...", "narrative": "..."}`;
+  return withPolicies ? base.replace("- Output ONLY valid JSON", `${POLICY_RULE}\n- Output ONLY valid JSON`) : base;
 }
 
 interface NarrateInput {
@@ -80,7 +84,7 @@ export async function narrate(
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 320,
-    system: buildSystem(tenant),
+    system: buildSystem(tenant, !!(policies && policies.length > 0)),
     messages: [{ role: "user", content: userMsg }],
   });
 
