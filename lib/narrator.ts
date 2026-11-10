@@ -45,6 +45,7 @@ interface NarrateInput {
 export interface NarrateResult {
   headline: string;
   narrative: string;
+  usage?: { input_tokens: number; output_tokens: number }; // D-043: for request tracing
 }
 
 function summariseRows(columns: string[], rows: unknown[][], row_count: number): string {
@@ -82,17 +83,20 @@ export async function narrate(
     .replace(/^```(?:json)?\s*/m, "")
     .replace(/\s*```$/m, "");
 
+  const usage = { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens };
   try {
     const parsed = JSON.parse(raw) as NarrateResult;
     return {
       headline: parsed.headline ?? "",
       narrative: parsed.narrative ?? "",
+      usage,
     };
   } catch {
     // Fallback if JSON parse fails
     return {
       headline: metric_used?.replace(/_/g, " ") ?? "Analysis result",
       narrative: raw.slice(0, 300),
+      usage,
     };
   }
 }

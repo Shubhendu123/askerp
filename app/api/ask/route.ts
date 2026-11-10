@@ -4,6 +4,7 @@ import { runWithValidation } from "@/lib/sqlValidator";
 import { narrate } from "@/lib/narrator";
 import { executeSQL } from "@/lib/db";
 import { retrieveWithRanker, expansionEnabled } from "@/lib/retrieval/retriever";
+import { recordTrace, type TraceData } from "@/lib/tracing";
 import type { RetrieveResponse, BenchmarkRanker } from "@/lib/retrieval/retriever";
 
 // Production retrieval mode (D-036/D-037): dense won H-tier in the benchmark
@@ -19,8 +20,45 @@ const envTimeout = Number(process.env.SQL_TIMEOUT_MS);
 const SQL_TIMEOUT_MS = Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 30_000; // D-042: bounds execution; the query itself is not cancelled on the cloud pool
 
 // ── Route handler ──────────────────────────────────────────────────────────────
+// D-043: tracing wrapper. The handler fills `tc` as it goes; the trace is written AFTER the response
+// exists, fire-and-forget (lib/tracing.ts swallows every error). Failures are traced too.
 export async function POST(req: NextRequest) {
   const t_start = Date.now();
+  const tc: Partial<TraceData> & { question?: string } = {};
+  try {
+    const res = await handle(req, t_start, tc);
+    if (tc.question) {
+      if (res.status >= 400 && tc.success === undefined) tc.success = false;
+      tc.total_ms = Date.now() - t_start;
+      recordTrace(finalizeTrace(tc));
+    }
+    return res;
+  } catch (err) {
+    if (tc.question) {
+      tc.success = false; tc.error_type = tc.error_type ?? "other";
+      tc.error_message = tc.error_message ?? (err instanceof Error ? err.message : String(err));
+      tc.total_ms = Date.now() - t_start;
+      recordTrace(finalizeTrace(tc));
+    }
+    throw err;
+  }
+}
+
+function finalizeTrace(tc: Partial<TraceData> & { question?: string }): TraceData {
+  return {
+    tenant: DEFAULT_TENANT, question: tc.question ?? "",
+    retrieval_mode: tc.retrieval_mode ?? RETRIEVAL_MODE, retrieval_k: tc.retrieval_k ?? RETRIEVAL_K, expand_tables: tc.expand_tables ?? expansionEnabled(),
+    chunk_ids: tc.chunk_ids ?? [], retrieval_ms: tc.retrieval_ms ?? 0,
+    sql_generated: tc.sql_generated ?? null, tokens_in: tc.tokens_in ?? 0, tokens_out: tc.tokens_out ?? 0, sqlgen_ms: tc.sqlgen_ms ?? 0,
+    validation_passed: tc.validation_passed ?? false, limit_added: tc.limit_added ?? false, retry_count: tc.retry_count ?? 0,
+    error_type: tc.error_type ?? null, error_message: tc.error_message ?? null,
+    rows_returned: tc.rows_returned ?? null, exec_ms: tc.exec_ms ?? 0,
+    narration_tokens_in: tc.narration_tokens_in ?? 0, narration_tokens_out: tc.narration_tokens_out ?? 0, narrate_ms: tc.narrate_ms ?? 0,
+    total_ms: tc.total_ms ?? 0, success: tc.success ?? false,
+  };
+}
+
+async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> & { question?: string }): Promise<NextResponse> {
 
   let question: string;
   try {
@@ -32,6 +70,7 @@ export async function POST(req: NextRequest) {
   if (!question) {
     return NextResponse.json({ error: "question is required" }, { status: 400 });
   }
+  tc.question = question;
 
   // Step 0: Retrieval (always runs; chunks used by SQL generator only when USE_RETRIEVAL=true)
   let retrievalResp: RetrieveResponse = { results: [], confidence: { top1_absolute: 0, top1_minus_top2_gap: 0, top1_to_top5_avg_ratio: 0, confidence_band: "VERY_LOW" } };
@@ -78,6 +117,14 @@ export async function POST(req: NextRequest) {
       } finally { execTimeMs += Date.now() - t; }
     },
   });
+  tc.retrieval_mode = RETRIEVAL_MODE; tc.retrieval_k = RETRIEVAL_K; tc.expand_tables = expansionEnabled();
+  tc.chunk_ids = retrievalResp.results.map((r) => (r as { id?: string; chunk_id?: string }).id ?? (r as { chunk_id?: string }).chunk_id ?? "");
+  tc.retrieval_ms = retrievalTimeMs; tc.sqlgen_ms = sqlGenTimeMs; tc.exec_ms = execTimeMs;
+  tc.sql_generated = outcome.finalSql || null;
+  tc.tokens_in = outcome.attempts.reduce((a, x) => a + (x.tokens_in ?? 0), 0);
+  tc.tokens_out = outcome.attempts.reduce((a, x) => a + (x.tokens_out ?? 0), 0);
+  tc.retry_count = outcome.retry_count; tc.limit_added = outcome.limit_added; tc.validation_passed = outcome.ok;
+  if (!outcome.ok) { tc.success = false; tc.error_type = outcome.final_error_class ?? "other"; tc.error_message = outcome.final_error_message ?? null; }
   const validation = {
     retry_count: outcome.retry_count,
     retry_outcome: outcome.retry_outcome,
@@ -135,7 +182,9 @@ export async function POST(req: NextRequest) {
     narrateTimeMs = Date.now() - t;
     headline = n.headline;
     narrative = n.narrative;
+    tc.narration_tokens_in = n.usage?.input_tokens ?? 0; tc.narration_tokens_out = n.usage?.output_tokens ?? 0;
   } catch { /* narrator failure is non-fatal */ }
+  tc.narrate_ms = narrateTimeMs; tc.rows_returned = execResult.row_count; tc.success = true;
 
   return NextResponse.json({
     question,

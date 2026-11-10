@@ -431,3 +431,30 @@ Cloud DB-exec p50 = 1,365ms, under the 3s flag threshold. All retrieved chunks `
 No regression on S02/M08.
 **Caveats:** (1) the 30s timeout bounds the request but cannot cancel the query itself on the MotherDuck pool (the harness's `interrupt()` fix applies to its own single connection); a runaway cloud query occupies one of the 3 pooled connections until it finishes. (2) The EXPLAIN pre-check adds one round-trip per attempt (negligible locally, roughly the cloud round-trip time on MotherDuck). (3) `row_count` is now capped by the enforced `LIMIT 1000` instead of reflecting the full result size. (4) Observed, not fixed: M08's narration called the spend "annual" though the warehouse spans 18 months — a narrator-precision issue outside this change.
 **Closes** the harness/production gap named in D-041. Still open from D-041: pathological-but-valid queries (timeouts), multi-metric composition, the semantic-model/compiler direction.
+
+## D-043 — Production request tracing (`ops.request_traces`) and `/traces` view
+
+**Status:** Accepted · 2026-11-10
+
+**Context.** D-040 instrumented stages in the eval harness only. Production `/api/ask` logged nothing persistent, so "what did last week cost", "which question types fail" and "did quality move after a change" were unanswerable.
+
+**Decision.**
+- One row per request in `ops.request_traces` (DDL: `db_rebuild/ddl/ops_request_traces.sql`; applied by `db_rebuild/apply_ops_ddl.ts`), created in both the local DuckDB file and MotherDuck. Fields cover retrieval, SQL generation (tokens, ms), validation (D-041 `error_type`, `retry_count`, `limit_added`), execution, narration, totals, estimated cost and `success`. Failures and refusals are traced too (`success=false`, `error_type`/`error_message` populated).
+- **Why the warehouse, not an external tool:** no new vendor or dependency, traces are SQL-queryable with the same engine as the product, and everything stays in-stack. The cost of this is that ops data shares the warehouse with business data (mitigated by the separate schema).
+- **Why a separate `ops` schema, not a tenant:** tenant isolation (D-035 prefixes, the tenant table allow-list in the validator) governs `main` / `mro_distributor`. `ops` is not in any tenant's allow-list, so generated SQL cannot read traces; and it is not a customer-facing dataset.
+- **Tracing never degrades the answer path.** The handler fills a trace context as it goes; the row is written *after* the response object exists, not awaited by the request (`recordTrace`, `lib/tracing.ts`). On Vercel the write is registered with `waitUntil` (`@vercel/functions`, the one new dependency; Next 14.2 has no `after()`) so the function is not frozen before the insert finishes. All errors are caught and logged to console. `TRACING_ENABLED=false` switches it off. Reuses the module-scope pg Pool (D-037); locally a short-lived read-write instance is opened and closed (the read path stays READ_ONLY).
+- **Resilience verified (gate 3):** with `TRACE_TABLE` pointed at a nonexistent table, S02 still returned HTTP 200 with DSO 44.02; the failure was logged as `[trace] write failed (ignored)` and no row was written.
+- **Cost estimation is shared:** the price table moved from `benchmark/run_benchmark.ts` into `lib/pricing.ts`; the harness and tracing both import it. Cost = SQL-gen tokens (including retries) + narration tokens at Haiku 4.5 rates.
+- `lib/narrator.ts` now returns `usage` (additive only; behaviour unchanged). Retrieval, generation, validator and narrator logic are otherwise untouched.
+- `/traces`: server-rendered read-only page in the existing light theme — tiles for today's (UTC) requests, cost, p50/p95, success rate, retries; the 50 most recent traces with expandable SQL, chunk ids and stage timings.
+
+**Tradeoff — per-row writes.** One INSERT per request. At demo volume this is negligible against the MotherDuck free tier; at scale the production answer is batching (buffer and flush) or a queue.
+
+**Known gaps.**
+- `/traces` has **no auth** (consistent with the rest of the demo). Traces expose questions, SQL and errors.
+- **No retention policy** — the table grows unbounded.
+- **Question text is stored verbatim** — a PII consideration in a real deployment (redaction/hashing needed).
+- `created_at` and "today" are UTC.
+- Trace write is best-effort: a crash/timeout of the function before `waitUntil` completes can drop a row. Acceptable for observability, not for audit.
+
+**Observed cost of refusals (gate 2).** A refusal costs about the same as a successful answer: C03 (refused) $0.0089 vs S02 $0.0074 and M08 $0.0092. Refusals are full-price failures, not free fallbacks. Correction to the intuitive explanation: narration does *not* run on a refusal (narration tokens were 0). The cost is all retrieval plus SQL generation, and the refusal's SQL-gen input was the largest of the three (8,403 tokens, 18 chunks after table expansion) because refusal-prone questions retrieve broadly. Both retrieval and the full-context generation call are paid before the model declines, so a cheaper pre-generation out-of-scope check is a candidate future optimisation (not built here).

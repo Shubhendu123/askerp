@@ -213,15 +213,9 @@ async function fullRun() {
 import { execFileSync } from "child_process";
 import crypto from "crypto";
 
-const PRICES: Record<string, [number, number]> = { // $/token [in, out]
-  "claude-haiku-4-5-20251001": [1.0 / 1e6, 5.0 / 1e6],
-  "claude-sonnet-4-5": [3.0 / 1e6, 15.0 / 1e6],
-};
-function priceFor(model: string): [number, number] {
-  const p = PRICES[model];
-  if (!p) { console.warn(`WARN: no price entry for ${model}; using Haiku rates for cost estimates`); return PRICES[MODEL]; }
-  return p;
-}
+import { PRICES as SHARED_PRICES, priceFor as sharedPriceFor } from "../lib/pricing";
+const PRICES = SHARED_PRICES; // D-043: single price table shared with production tracing
+const priceFor = sharedPriceFor;
 
 function flag(name: string, dflt?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);

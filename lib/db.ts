@@ -110,3 +110,20 @@ export async function executeSQL(sql: string, maxRows = MAX_ROWS): Promise<Query
     ? executeSQLCloud(sql, maxRows)
     : executeSQLLocal(sql, maxRows);
 }
+
+// D-043: parameterised write for ops tracing. Uses the same pooled cloud connection (D-037);
+// locally opens a short-lived read-write instance (executeSQLLocal is READ_ONLY by design).
+export async function writeSQL(sql: string, params: unknown[]): Promise<void> {
+  if (process.env.MOTHERDUCK_TOKEN) {
+    await getPool().query(sql, params);
+    return;
+  }
+  const instance = await duckdb.DuckDBInstance.create(DB_PATH);
+  const connection = await instance.connect();
+  try {
+    await connection.run(sql, params as never);
+  } finally {
+    connection.closeSync();
+    instance.closeSync(); // checkpoint + release the file lock so no .wal lingers
+  }
+}
