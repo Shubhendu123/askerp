@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 2.4
 owner: Head of Settlements
 binds_to: [stl_trade_instruction.days_failed, stl_trade_instruction.fail_reason_code, dim_counterparty.reliability_tier, dim_client.sla_tier]
+governs: "individual failed settlement instructions (ageing and escalation)"
 ---
 
 # Settlement Fail Management and Escalation Procedure

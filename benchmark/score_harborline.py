@@ -32,11 +32,35 @@ def citations(text, retrieved):
         if not ok: bad.append(f"POL-{d}" + (f" §{s}" if s else ""))
     return round(1 - len(bad) / len(cited), 4), bad
 
+# D-048 narration fidelity + policy scope checks (ground truth = the executed SQL itself)
+WINDOW = re.compile(r"\b(trailing|rolling|last\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|past\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|(?:previous|prior)\s+(?:\d+\s+)?(?:month|quarter|year)s?|year[- ]to[- ]date|ytd|this\s+(?:month|quarter|year)|over\s+the\s+(?:last|past)|recent(?:ly)?|\d+[- ]months?|\d+[- ]days?\s+(?:window|period)|Q[1-4]\s*20\d\d|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d|20\d\d)\b", re.I)
+SQL_DATE = re.compile(r"date_key|full_date|year_num|month_num|quarter_num|current_date|now\(\)|interval|date_trunc|date\s+'", re.I)
+TIER_WORDS = re.compile(r"\b(tier|tiers|platinum|gold|silver|bronze|sla|sla tier)\b", re.I)
+
+def fidelity_scope(rec):
+    text = (rec.get("narrative") or "") + " " + (rec.get("headline") or ""); sql = rec.get("sql") or ""
+    q = (rec.get("question") or "")
+    win = sorted({m.group(0).lower() for m in WINDOW.finditer(text)})
+    # a window the question itself asked for (e.g. "last month", "September 2026") is fine only if the SQL has a date filter
+    window_bad = bool(win) and not SQL_DATE.search(sql)
+    text = re.sub(r"sla[- ]credits?|mid-tier|service[- ]level (?:breach|agreement)s?", " ", text, flags=re.I)
+    uses_client = bool(re.search(r"client_key|dim_client|sla_tier", sql, re.I)); uses_cp = bool(re.search(r"counterparty_key|dim_counterparty|reliability_tier", sql, re.I))
+    scope = []
+    if re.search(r"\bsla\b|platinum|gold|silver|bronze", text, re.I) and not uses_client: scope.append("SLA/client-tier language but SQL is not per client")
+    if re.search(r"counterpart\w*\s+tier|tier[- ][abcd]\b|\btier\s+[abcd]\b|\btiers?\b", text, re.I) and not (uses_cp or uses_client): scope.append("tier language but SQL is not per counterparty/client")
+    if re.search(r"POL-001", text) and not uses_client: scope.append("cites POL-001 without a per-client SQL")
+    if re.search(r"POL-007", text) and not uses_cp: scope.append("cites POL-007 without a per-counterparty SQL")
+    return {"window_claims": win, "window_bad": window_bad, "scope_viol": scope}
+
 def score(rec):
     q = Q[rec["id"]]; got = list(rec.get("retrieved_chunk_ids") or []); gs = set(got)
     out = {"R_recall": None, "R_precision": None, "table_cov": None, "policy_cov": None, "A": None, "ctrl_ok": None, "ctrl_note": None}
     cite, bad = citations(rec.get("narrative", "") + " " + rec.get("headline", ""), got)
     out["citation_acc"], out["bad_citations"] = cite, bad
+    out.update(fidelity_scope(rec))
+    if rec["id"] == "S02":   # D-048 ground-truth check: overall fail rate - no tier/SLA talk, no stated time window the SQL lacks
+        txt = (rec.get("narrative") or "") + " " + (rec.get("headline") or "")
+        out["s02_tier_mention"] = bool(TIER_WORDS.search(txt)); out["s02_ok"] = (not TIER_WORDS.search(txt)) and not out["window_bad"] and bool(rec.get("sql_valid"))
     if "control" in q:
         c = q["control"]; cross = [i for i in got if c.get("forbidden_prefix") and i.startswith(c["forbidden_prefix"])]
         foreign = [i for i in got if not i.startswith("harborline:")]
@@ -82,6 +106,69 @@ def summarize(path):
     print(f"controls passed: {sum(1 for r in ctrl if r['scoring']['ctrl_ok'])}/{len(ctrl)}")
 
 
+
+def multi(files):
+    """D-048: aggregate N runs. mean and [min,max] of mean-A per tier, policy chunks, S01/S02/H05/H02 and fidelity/scope checks."""
+    RUNS = [{r["id"]: r for r in map(json.loads, open(f)) if r} for f in files]; n = len(RUNS)
+    mean = lambda xs: (sum(xs) / len(xs)) if xs else float("nan")
+    npol = lambda r: sum(1 for i in r["retrieved_chunk_ids"] if ":POL-" in i)
+    rng = lambda xs, fmt="{:.2f}": f"{fmt.format(mean(xs))}  [{fmt.format(min(xs))} - {fmt.format(max(xs))}]"
+    CITES = lambda r: sorted(set(re.findall(r"POL-\d{3}\s*§\s*\d+", r.get("narrative") or "")))
+    print(f"\nD-048: {n} runs of 30 questions")
+    for t, nm in zip("SMHP", ["simple (8)", "medium (8)", "hard cross-area (5)", "hybrid (5)"]):
+        print(f"  mean A {nm:22s}", rng([mean([r['scoring']['A'] for r in R.values() if r['tier'] == t]) for R in RUNS]))
+    print(f"  mean A {'all answerable (26)':22s}", rng([mean([r['scoring']['A'] for r in R.values() if r['tier'] != 'C']) for R in RUNS]))
+    print("  valid SQL (of 26)                 ", rng([sum(1 for r in R.values() if r['tier'] != 'C' and r['sql_valid']) for R in RUNS], "{:.0f}"))
+    print("  policy chunks / question (mean)   ", rng([mean([npol(r) for r in R.values()]) for R in RUNS]))
+    print("  policy chunks, 17 not needing one ", rng([mean([npol(r) for q, r in R.items() if not Q[q].get('expected', {}).get('policies') and r['tier'] != 'C']) for R in RUNS]))
+    print("  policy chunks, 9 needing one      ", rng([mean([npol(r) for q, r in R.items() if Q[q].get('expected', {}).get('policies')]) for R in RUNS]))
+    print("  questions with zero policy chunks ", rng([sum(1 for r in R.values() if npol(r) == 0) for R in RUNS], "{:.0f}"))
+    print("  policy coverage (required)        ", rng([mean([r['scoring']['policy_cov'] for r in R.values() if r['scoring']['policy_cov'] is not None]) for R in RUNS]))
+    print("  R_recall / R_precision            ", rng([mean([r['scoring']['R_recall'] for r in R.values() if r['scoring']['R_recall'] is not None]) for R in RUNS]), "/", rng([mean([r['scoring']['R_precision'] for r in R.values() if r['scoring']['R_precision'] is not None]) for R in RUNS]))
+    print("  validator retries (total)         ", rng([sum(r['retry_count'] for r in R.values()) for R in RUNS], "{:.0f}"))
+    for q in ("S01", "S02", "H05", "H02"):
+        print(f"  {q} ({Q[q]['question'][:60]}...)")
+        for i, R in enumerate(RUNS, 1):
+            r = R[q]; sc = r["scoring"]
+            extra = f" s02_ok={sc.get('s02_ok')} tier_words={sc.get('s02_tier_mention')}" if q == "S02" else ""
+            print(f"     run{i}: A={sc['A']} valid={r['sql_valid']} rows={r['row_count']} (GT {len(GT[q]['result'])}) retries={r['retry_count']} policy_chunks={npol(r)} cites={CITES(r)} window_claims={sc['window_claims']}{extra}")
+    print("FIDELITY / SCOPE (all 30 answers per run)")
+    print("  answers stating a time window the SQL lacks ", rng([sum(1 for r in R.values() if r['scoring'].get('window_bad')) for R in RUNS], "{:.0f}"))
+    print("  scope violations (policy/tier on wrong entity)", rng([sum(1 for r in R.values() if r['scoring'].get('scope_viol')) for R in RUNS], "{:.0f}"))
+    print("  S02 check passes (no tier/SLA, no phantom window)", sum(1 for R in RUNS if R['S02']['scoring'].get('s02_ok')), "/", n)
+    print("  citations: wrong", [sum(len(r['scoring']['bad_citations']) for r in R.values()) for R in RUNS], " answers citing a policy", [sum(1 for r in R.values() if r['scoring']['citation_acc'] is not None) for R in RUNS])
+    print("  controls passed (of 4)", [sum(1 for r in R.values() if r['tier'] == 'C' and r['scoring']['ctrl_ok']) for R in RUNS], " P04/P05 A", [(R['P04']['scoring']['A'], R['P05']['scoring']['A']) for R in RUNS])
+    for i, R in enumerate(RUNS, 1):
+        for r in R.values():
+            sc = r["scoring"]
+            if sc.get("window_bad") or sc.get("scope_viol"): print(f"     run{i} {r['id']}: window={sc['window_claims'] if sc.get('window_bad') else '-'} scope={sc['scope_viol']}")
+
+def ablate(specs):
+    """D-047 ablation. specs: 'name=glob' ... Each glob = the N runs of one configuration. Per tier: mean and [min-max] across runs."""
+    import glob
+    mean = lambda xs: (sum(xs) / len(xs)) if xs else float("nan")
+    cfgs = {}
+    for sp in specs:
+        name, pat = sp.split("=", 1); fs_ = sorted(glob.glob(pat))
+        cfgs[name] = [{r["id"]: r for r in map(json.loads, open(f)) if r} for f in fs_]
+    metrics = [("A", lambda r: r["scoring"]["A"]), ("R_recall", lambda r: r["scoring"]["R_recall"]), ("R_prec", lambda r: r["scoring"]["R_precision"]),
+               ("pol_cov", lambda r: r["scoring"]["policy_cov"]), ("tok_in", lambda r: r["tokens_in"]), ("cost$", lambda r: r["cost_usd"])]
+    for tier, tn in (("S", "simple"), ("M", "medium"), ("H", "hard"), ("P", "hybrid"), ("ALL", "all 26 answerable")):
+        print(f"\n== {tn} ==   (mean [min-max] over runs of the per-run tier mean; tok_in/cost$ = per-question mean)")
+        print(f"{'config':16}{'n':>2}" + "".join(f"{m:>26}" for m, _ in metrics))
+        for name, RUNS in cfgs.items():
+            cells = []
+            for m, fn in metrics:
+                per = []
+                for R in RUNS:
+                    xs = [fn(r) for r in R.values() if r["tier"] != "C" and (tier == "ALL" or r["tier"] == tier) and fn(r) is not None]
+                    if xs: per.append(mean(xs))
+                f = "{:.0f}" if m == "tok_in" else ("{:.4f}" if m == "cost$" else "{:.2f}")
+                cells.append("-" if not per else f"{f.format(mean(per))} [{f.format(min(per))}-{f.format(max(per))}]")
+            print(f"{name:16}{len(RUNS):>2}" + "".join(f"{c:>26}" for c in cells))
+    print("\n== run totals ==")
+    for name, RUNS in cfgs.items():
+        print(f"{name:16} runs={len(RUNS)} cost/run " + ", ".join(f"${sum(r['cost_usd'] for r in R.values()):.3f}" for R in RUNS) + " | valid SQL/26 " + ", ".join(str(sum(1 for r in R.values() if r['tier'] != 'C' and r['sql_valid'])) for R in RUNS) + " | controls " + ", ".join(str(sum(1 for r in R.values() if r['tier'] == 'C' and r['scoring']['ctrl_ok'])) for R in RUNS) + " | policy chunks/q " + ", ".join(f"{mean([sum(1 for i in r['retrieved_chunk_ids'] if ':POL-' in i) for r in R.values()]):.1f}" for R in RUNS))
 
 def compare(fa, fb, la="Run 1", lb="Run 2"):
     """Side-by-side of two run files (D-046): retrieval, policy load, accuracy by tier, citations, negative tests."""
@@ -129,6 +216,8 @@ def compare(fa, fb, la="Run 1", lb="Run 2"):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 3 and sys.argv[1] == "--compare": compare(sys.argv[2], sys.argv[3])
+    if len(sys.argv) > 2 and sys.argv[1] == "--ablate": ablate(sys.argv[2:])
+    elif len(sys.argv) > 2 and sys.argv[1] == "--multi": multi(sys.argv[2:])
+    elif len(sys.argv) > 3 and sys.argv[1] == "--compare": compare(sys.argv[2], sys.argv[3])
     elif len(sys.argv) > 2 and sys.argv[1] == "--summarize": summarize(sys.argv[2])
     else: print(json.dumps(score(json.load(sys.stdin))))

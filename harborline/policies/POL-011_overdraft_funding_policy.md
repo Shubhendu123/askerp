@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 2.3
 owner: Head of Treasury Operations
 binds_to: [pos_cash_balance, stl_trade_instruction, dim_client.sla_tier, clt_fee_invoice]
+governs: "individual client cash accounts"
 ---
 
 # Client Cash Overdraft and Funding Cost Policy

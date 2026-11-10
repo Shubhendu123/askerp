@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 1.8
 owner: Head of Reconciliations
 binds_to: [rec_break, dim_subcustodian, stl_trade_instruction]
+governs: "individual reconciliation breaks"
 ---
 
 # Reconciliation Break Ageing and Escalation Policy

@@ -21,6 +21,17 @@ export interface TenantSchemaInfo {
   schema: string;          // e.g. "mro_distributor"
   tables: Set<string>;     // bare table names of the active tenant
   requireQualification?: boolean; // default true; false for tenants whose tables are referenced unqualified (northwind)
+  /**
+   * Tenant-specific rejection rules (D-048). Absent for mro/northwind, so their validation is unchanged. Both rules are
+   * classified binder_error, so the existing classified retry (max 2, verbatim message fed back) handles them.
+   */
+  rules?: {
+    noDateKeyArithmetic?: boolean; // no arithmetic on YYYYMMDD *_date_key columns; join the date dimension instead
+    noFactFanout?: boolean;        // a single SELECT scope may not reference two or more fact tables
+    factTablePrefixes?: string[];  // e.g. ["stl_", "pos_", "cae_", "clt_", "rec_"]
+    /** header tables: joining one to its child fact is many-to-one and safe unless the parent's columns are aggregated */
+    parentTables?: string[];       // e.g. ["cae_event"]
+  };
 }
 
 export interface ValidationFailure { cls: ErrorClass; message: string }
@@ -41,6 +52,79 @@ const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|COPY|
 
 export function stripTrailingSemicolon(sql: string): string {
   return sql.trim().replace(/;+\s*$/, "");
+}
+
+// ── Tenant rules (D-048) ─────────────────────────────────────────────────────
+
+const DATE_KEY = String.raw`(?:[A-Za-z_]\w*\s*\.\s*)?(?:[A-Za-z_]\w*_date_key|date_key)\b`;
+const DATE_KEY_ARITHMETIC: RegExp[] = [
+  new RegExp(String.raw`\b(?:MIN|MAX)\s*\(\s*${DATE_KEY}\s*\)\s*[-+*/%]`, "i"),   // MAX(date_key) - 36500
+  new RegExp(String.raw`${DATE_KEY}\s*[-+*/%]`, "i"),                                   // order_date_key / 100, key + 7
+  new RegExp(String.raw`[\w)\]]\s*[-+*/%]\s*${DATE_KEY}`, "i"),                         // 20251022 - d.date_key
+];
+
+/** Split a scanned statement into SELECT scopes: the top level and every parenthesised (SELECT|WITH ...) group, each with nested groups blanked. */
+function selectScopes(scan: string): string[] {
+  const scopes: string[] = [];
+  const stack: { sub: boolean; buf: string }[] = [{ sub: true, buf: "" }];
+  for (let i = 0; i < scan.length; i++) {
+    const ch = scan[i];
+    if (ch === "(") {
+      const sub = /^\(\s*(SELECT|WITH)\b/i.test(scan.slice(i, i + 30));
+      stack.push({ sub, buf: sub ? "" : "(" });
+    } else if (ch === ")" && stack.length > 1) {
+      const top = stack.pop()!;
+      if (top.sub) { scopes.push(top.buf); stack[stack.length - 1].buf += " (subquery) "; }
+      else stack[stack.length - 1].buf += top.buf + ")";
+    } else stack[stack.length - 1].buf += ch;
+  }
+  while (stack.length) scopes.push(stack.pop()!.buf);
+  return scopes;
+}
+
+function checkTenantRules(scan: string, info: TenantSchemaInfo): ValidationFailure | null {
+  const r = info.rules;
+  if (!r) return null;
+  if (r.noDateKeyArithmetic) {
+    for (const re of DATE_KEY_ARITHMETIC) {
+      const m = scan.match(re);
+      if (m) {
+        return { cls: "binder_error", message:
+          `Rule violation (date keys): arithmetic on a YYYYMMDD date key ("${m[0].replace(/\s+/g, " ").trim()}"). ` +
+          `Date keys are integers like 20251022, so key arithmetic is not date arithmetic. Join ${info.schema}.dim_date on the key and use ` +
+          `dim_date.full_date / year_num / month_num / quarter_num; do date arithmetic on dim_date.full_date. Comparing a key to a literal is fine.` };
+      }
+    }
+  }
+  if (r.noFactFanout) {
+    const prefixes = (r.factTablePrefixes ?? []).map((p) => p.replace(/[^\w]/g, ""));
+    if (prefixes.length) {
+      const re = new RegExp(String.raw`\b${info.schema}\s*\.\s*((?:${prefixes.join("|")})\w*)`, "gi");
+      for (const scope of selectScopes(scan)) {
+        const facts = Array.from(new Set(Array.from(scope.matchAll(re)).map((m) => m[1].toLowerCase())));
+        const parents = (r.parentTables ?? []).map((x) => x.toLowerCase());
+        const children = facts.filter((f) => !parents.includes(f));
+        // parent+single-child join is many-to-one: safe unless a parent column is aggregated (counted/summed/filtered inside an aggregate)
+        let violating = facts.length >= 2 && !(children.length === 1 && facts.length === 2 && parents.includes(facts.find((f) => f !== children[0])!));
+        if (!violating && facts.length === 2) {
+          const parent = facts.find((f) => f !== children[0])!;
+          const am = scope.match(new RegExp(String.raw`\b${info.schema}\s*\.\s*${parent}\b(?:\s+(?:AS\s+)?(?!(?:JOIN|LEFT|RIGHT|INNER|FULL|CROSS|ON|USING|WHERE|GROUP|ORDER|HAVING|LIMIT)\b)([A-Za-z_]\w*))?`, "i"));
+          const alias = am?.[1] ?? parent;
+          const aggArg = new RegExp(String.raw`\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\([^()]*\b${alias}\s*\.`, "i");
+          const filt = new RegExp(String.raw`\bFILTER\s*\(\s*WHERE[^()]*\b${alias}\s*\.`, "i");
+          // also LEFT JOIN from the parent makes COUNT(*) count parent*child rows
+          violating = aggArg.test(scope) || filt.test(scope);
+        }
+        if (violating) {
+          return { cls: "binder_error", message:
+            `Rule violation (fan-out): one SELECT references ${facts.length} fact tables (${facts.join(", ")}). Joining fact tables row-to-row multiplies rows and ` +
+            `inflates every count and sum. Aggregate EACH fact table in its own CTE (grouped by the shared key, e.g. client_key or market_key) and join the CTEs, ` +
+            `so each SELECT references at most one fact table.` };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /** Static checks. Returns null when the statement passes. */
@@ -72,7 +156,7 @@ export function validateStatic(sqlIn: string, info: TenantSchemaInfo): Validatio
       return { cls: "binder_error", message: `Unknown table reference: ${t}` };
     }
   }
-  return null;
+  return checkTenantRules(scan, info);
 }
 
 /** Append LIMIT when the statement has no top-level LIMIT. */

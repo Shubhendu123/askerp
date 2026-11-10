@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 4.0
 owner: Head of Settlements
 binds_to: [dim_market, dim_subcustodian, stl_trade_instruction.is_matched_on_time, stl_trade_instruction.intended_settle_date_key]
+governs: "individual markets (settlement cycle, cut-offs)"
 ---
 
 # Market Settlement Conventions and Instruction Cut-offs

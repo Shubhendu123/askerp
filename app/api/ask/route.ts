@@ -178,7 +178,8 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
       rows: execResult.rows,
       row_count: execResult.row_count,
       truncated: execResult.truncated,
-      policies: retrievalResp.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text })),
+      sql: finalSql,
+      policies: retrievalResp.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text, governs: r.policy?.governs })),
     }, DEFAULT_TENANT);
     narrateTimeMs = Date.now() - t;
     headline = n.headline;

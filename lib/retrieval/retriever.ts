@@ -76,6 +76,7 @@ export interface PolicyMeta {
   section_no: number;
   citation: string;      // "POL-001 §2" - what the narrator cites
   binds_to: string[];
+  governs: string;       // D-048: the entity type this policy applies to (scope rule)
   domain: string;
   effective_date: string;
 }
@@ -202,6 +203,7 @@ export function loadPolicyChunks(root: string): Chunk[] {
       const meta: PolicyMeta = {
         doc_id: docId, title, section: heading, section_no: no, citation: `${docId} §${no}`,
         binds_to: Array.isArray(fm.binds_to) ? (fm.binds_to as unknown[]).map(String) : [],
+        governs: String(fm.governs ?? ""),
         domain: String(fm.domain ?? ""), effective_date: String(fm.effective_date instanceof Date ? fm.effective_date.toISOString().slice(0, 10) : fm.effective_date ?? ""),
       };
       out.push({ id: `${tenant}:${docId}#${no}`, tenant, type: "policy", name: `${docId} §${no} ${heading.replace(/^\d+\.\s*/, "")}`,
@@ -508,15 +510,19 @@ function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chu
  * dropped, referenced ones not already ranked are appended with expanded=true. (Found in Gate B: with ranked policies
  * filling the cap first, a metric's own referenced rule was routinely crowded out by unrelated ranked policy text.)
  */
+/** D-048: policy_refs are followed only for the N highest-ranked metric chunks (results arrive in rank order). */
+const POLICY_REF_TOP_METRICS = 3;
+
 function expandPolicies(results: RetrievalResult[], index: TenantIndex, tenant: string, enabled: boolean): RetrievalResult[] {
   const cap = maxPolicyChunks();
   const byId = new Map(index.chunks.map((c) => [c.id, c]));
   const cand: string[] = [];
   const add = (id: string) => { if (!cand.includes(id)) cand.push(id); };
+  let metricsSeen = 0;
   for (const r of results) {
     if (r.expanded) continue; // table-expansion entries carry no evidence rank
     if (r.type === "policy") add(r.id);
-    else if (enabled && r.type === "metric") {
+    else if (enabled && r.type === "metric" && ++metricsSeen <= POLICY_REF_TOP_METRICS) { // D-048: only the top-ranked metrics may pull in their policy_refs
       for (const ref of byId.get(r.id)?.policyRefs ?? []) {
         const targets = ref.includes("#")
           ? [byId.get(`${tenant}:${ref}`)]
@@ -543,6 +549,14 @@ export async function getTenantChunks(tenant: string): Promise<Array<{ id: strin
   const index = _tenants!.get(tenant);
   if (!index) throw new Error(`Unknown tenant '${tenant}'`);
   return index.chunks.map((c) => ({ id: c.id, type: c.type, name: c.name, text: c.text }));
+}
+
+/** D-047 ablation (schema mode): the tenant's ENTIRE corpus - every metric, table and policy section - as results, no ranking, no caps. */
+export async function retrieveAll(tenant: string): Promise<RetrieveResponse> {
+  await ensureInit();
+  const index = _tenants!.get(tenant);
+  if (!index) throw new Error(`Unknown tenant '${tenant}'`);
+  return { results: index.chunks.map((c) => toResult(c, 1)), confidence: computeConfidence([1]) };
 }
 
 export async function retrieveWithRanker(

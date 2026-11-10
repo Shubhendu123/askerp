@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 1.5
 owner: Head of Network Management
 binds_to: [dim_subcustodian, dim_market, pos_daily_position, rec_break, stl_trade_instruction]
+governs: "individual subcustodians / markets"
 ---
 
 # Subcustodian Network Oversight and Concentration Policy

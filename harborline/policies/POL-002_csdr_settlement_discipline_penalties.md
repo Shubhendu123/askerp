@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 2.1
 owner: Head of Settlements
 binds_to: [dim_market.penalty_regime, stl_fail_penalty, stl_trade_instruction, dim_security.security_type]
+governs: "individual failed settlement instructions and the party that bears each penalty"
 ---
 
 # Settlement Discipline and Cash Penalty Framework

@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 3.0
 owner: Head of Asset Servicing
 binds_to: [cae_event, cae_client_election, dim_client.sla_tier, dim_market]
+governs: "individual corporate action events and client elections"
 ---
 
 # Corporate Action Processing and Election Deadline Policy

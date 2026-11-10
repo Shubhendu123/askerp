@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 6.0
 owner: Head of Product and Pricing
 binds_to: [clt_fee_invoice, dim_client.client_segment, dim_client.sla_tier, pos_daily_position]
+governs: "individual clients (fees, waivers, profitability)"
 ---
 
 # Client Fee Schedule and Billing Policy

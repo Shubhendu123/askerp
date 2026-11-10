@@ -4,6 +4,7 @@ import path from "path";
 import * as yaml from "js-yaml";
 import type { RetrievalResult } from "./retrieval/retriever";
 import { getTenantConfig } from "./tenants";
+import type { TenantSchemaInfo } from "./sqlValidator";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -177,7 +178,7 @@ function buildRetrievedSystem(chunks: RetrievalResult[], tenant: string): string
   // D-045: policy chunks supply thresholds and rules; the generator may embed them in SQL but must not invent any.
   const policies = chunks.filter((c) => c.type === "policy");
   const policySection = policies.length > 0
-    ? `RETRIEVED POLICY CONTEXT (${policies.length} policy sections):\n${policies.map((c) => `[${c.policy?.citation ?? c.id}] ${c.text}`).join("\n\n")}\n\nPOLICY RULE: thresholds, targets and criteria used in SQL must come from the policy sections above (embed them as literals). Never invent a threshold that is not in a retrieved policy section; if the question depends on a rule that is not retrieved, set "sql" to null and say which rule is missing.`
+    ? `RETRIEVED POLICY CONTEXT (${policies.length} policy sections):\n${policies.map((c) => `[${c.policy?.citation ?? c.id}]${c.policy?.governs ? ` (governs: ${c.policy.governs})` : ""} ${c.text}`).join("\n\n")}\n\nPOLICY RULE: thresholds, targets and criteria used in SQL must come from the policy sections above (embed them as literals). Never invent a threshold that is not in a retrieved policy section; if the question depends on a rule that is not retrieved, set "sql" to null and say which rule is missing. SCOPE RULE: a policy applies ONLY to the entity type it governs (see "governs"). Counterparty tiers (POL-007) grade counterparties; SLA targets (POL-001) are per client. Never apply a rule to a different entity type, and never grade Harborline as a whole against a per-client or per-counterparty rule.`
     : "";
   return [tenantBase(tenant), tableSection, metricSection, policySection, tenantRules(tenant)].filter(Boolean).join("\n\n");
 }
@@ -228,9 +229,12 @@ export interface SQLResult {
 }
 
 /** Table names of a tenant (from schema.yaml) for the SQL validator (D-042). */
-export function getTenantSchemaInfo(tenant: string): { schema: string; tables: Set<string>; requireQualification: boolean } {
+export function getTenantSchemaInfo(tenant: string): TenantSchemaInfo {
   const tables = new Set(parsedSchema.tables.filter((t) => t.tenant === tenant).map((t) => t.name));
-  if (tenant === "harborline") return { schema: "harborline", tables, requireQualification: true };
+  if (tenant === "harborline") {
+    return { schema: "harborline", tables, requireQualification: true,
+      rules: { noDateKeyArithmetic: true, noFactFanout: true, factTablePrefixes: ["stl_", "pos_", "cae_", "clt_", "rec_"] } }; // D-048
+  }
   return tenant === "mro"
     ? { schema: "mro_distributor", tables, requireQualification: true }
     : { schema: "main", tables, requireQualification: false };

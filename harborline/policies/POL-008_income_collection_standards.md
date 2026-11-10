@@ -7,6 +7,7 @@ effective_date: 2025-01-01
 version: 2.2
 owner: Head of Asset Servicing
 binds_to: [cae_income_payment, cae_event, dim_client.sla_tier, pos_cash_balance]
+governs: "individual income payments"
 ---
 
 # Income Collection and Contractual Settlement Standards

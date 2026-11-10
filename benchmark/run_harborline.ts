@@ -22,14 +22,15 @@ const LABEL = (() => { const i = process.argv.indexOf("--label"); return i >= 0 
 process.env.ACTIVE_TENANT = REGRESSION ? "mro" : "harborline";
 
 async function main() {
-  const { retrieveWithRanker } = await import("../lib/retrieval/retriever");
+  const { retrieveWithRanker, retrieveAll } = await import("../lib/retrieval/retriever");
   const { generateSQL, getTenantSchemaInfo } = await import("../lib/sqlGenerator");
   const { runWithValidation } = await import("../lib/sqlValidator");
   const { narrate } = await import("../lib/narrator");
   const { executeSQL } = await import("../lib/db");
   const { estimateCostUsd } = await import("../lib/pricing");
 
-  const K = 10, MODE = "rrf" as const;
+  const arg = (n: string, d: string) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
+  const K = Number(arg("--k", "10")), MODE = arg("--mode", "rrf") as "rrf" | "bm25" | "dense" | "schema"; // D-047 ablation; defaults = production
   const tenant = REGRESSION ? "mro" : "harborline";
   const cfg = JSON.parse(fs.readFileSync(REGRESSION ? "benchmark/questions.json" : "benchmark/questions_harborline.json", "utf-8"));
   const qs: Array<{ id: string; tier: string; question: string }> = REGRESSION
@@ -42,7 +43,7 @@ async function main() {
   let total = 0;
   for (const q of qs) {
     const t0 = Date.now();
-    const ret = await retrieveWithRanker(q.question, K, tenant, MODE);
+    const ret = MODE === "schema" ? await retrieveAll(tenant) : await retrieveWithRanker(q.question, K, tenant, MODE);
     const ids = ret.results.map((r) => r.id);
     type Exec = Awaited<ReturnType<typeof executeSQL>>;
     const hold: { g: Awaited<ReturnType<typeof generateSQL>> | null } = { g: null };
@@ -69,7 +70,8 @@ async function main() {
         const n = await narrate({
           question: q.question, metric_used: hold.g?.metric_used ?? null, sentiment: hold.g?.sentiment ?? null,
           columns: exec.columns, rows: exec.rows, row_count: exec.row_count, truncated: exec.truncated,
-          policies: ret.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text })),
+          sql: out.finalSql,
+          policies: ret.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text, governs: r.policy?.governs })),
         }, tenant);
         headline = n.headline; narrative = n.narrative; ntin = n.usage?.input_tokens ?? 0; ntout = n.usage?.output_tokens ?? 0;
       } catch { /* narration failure must not lose the record */ }
