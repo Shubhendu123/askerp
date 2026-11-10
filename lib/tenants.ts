@@ -19,6 +19,7 @@ export interface TenantConfig {
   warehouseLabel: string;   // DataOverviewCard subtitle
   metaDescription: string;  // page <meta description>
   llmDescriptor: string;    // short descriptor used inside LLM system prompts
+  suggestedQuestions: string[]; // landing-page chips; each must be answerable by this tenant's warehouse
 }
 
 export const TENANTS: Record<string, TenantConfig> = {
@@ -31,6 +32,13 @@ export const TENANTS: Record<string, TenantConfig> = {
     warehouseLabel: "Summit Industrial Supply Co. warehouse",
     metaDescription: "Conversational analytics for Summit Industrial Supply Co. — ask questions, get answers.",
     llmDescriptor: "Summit Industrial Supply Co., an industrial MRO (maintenance, repair & operations) distributor",
+    suggestedQuestions: [
+      "What is our total revenue?",
+      "What is our current DSO?",
+      "Which item category has the best gross margin?",
+      "Who are our top 10 suppliers by spend?",
+      "Which warehouse has the worst OTIF?",
+    ],
   },
   harborline: {
     id: "harborline",
@@ -41,6 +49,12 @@ export const TENANTS: Record<string, TenantConfig> = {
     warehouseLabel: "Harborline Global Custody warehouse",
     metaDescription: "Conversational analytics for Harborline Global Custody — ask questions, get answers.",
     llmDescriptor: "Harborline Global Custody, a mid-tier global custodian (securities services) with about $700B of assets under custody",
+    suggestedQuestions: [
+      "What is our overall settlement fail rate?",
+      "Which counterparties cost us the most in penalties?",
+      "Which corporate action elections did we miss?",
+      "What is our tax reclaim filed rate by market?",
+    ],
   },
   northwind: {
     id: "northwind",
@@ -51,6 +65,13 @@ export const TENANTS: Record<string, TenantConfig> = {
     warehouseLabel: "Northwind Furniture warehouse",
     metaDescription: "Conversational analytics for Northwind Furniture — ask questions, get answers.",
     llmDescriptor: "Northwind Furniture, a ~$50M B2B furniture company",
+    suggestedQuestions: [
+      "What was our total revenue in 2024?",
+      "Top 5 customers by order count",
+      "Cancellation rate by quarter",
+      "Outdoor furniture gross margin in 2025",
+      "Which customers churned recently?",
+    ],
   },
 };
 

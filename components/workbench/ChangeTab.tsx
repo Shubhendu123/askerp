@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AskResponse } from "./Workbench";
 import { formatTitle, formatDuration } from "@/lib/format";
 
@@ -207,6 +207,12 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
 export default function ChangeTab({ response, loading }: Props) {
   const [sqlOpen, setSqlOpen] = useState(false);
   const [retrievalOpen, setRetrievalOpen] = useState(false);
+  // The SQL / Retrieval panels render below the main card. With a long narration (e.g. Harborline) they land below the fold
+  // and, with no visible change near the button, the toggles look dead. Scroll the opened panel into view.
+  const sqlPanelRef = useRef<HTMLDivElement>(null);
+  const retrievalPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (sqlOpen) sqlPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [sqlOpen]);
+  useEffect(() => { if (retrievalOpen) retrievalPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [retrievalOpen]);
 
   const isSingleStat =
     response &&
@@ -376,6 +382,7 @@ export default function ChangeTab({ response, loading }: Props) {
       {/* Expandable: SQL */}
       {sqlOpen && response?.sql && (
         <div
+          ref={sqlPanelRef}
           className="p-4"
           style={{
             background: "var(--bg-surface)",
@@ -408,6 +415,7 @@ export default function ChangeTab({ response, loading }: Props) {
       {/* Expandable: Retrieval */}
       {retrievalOpen && Array.isArray(response?.retrieved) && (
         <div
+          ref={retrievalPanelRef}
           className="p-4"
           style={{
             background: "var(--bg-surface)",

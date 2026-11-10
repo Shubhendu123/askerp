@@ -133,8 +133,8 @@ export default function DataOverviewCard({ tenant = getTenantConfig("mro") }: Pr
               </>
             ) : (
               <>
-                <Stat value={fmt(data.customer_count)} label="Customers" />
-                <Stat value={fmt(data.order_count)} label="Orders" />
+                <Stat value={fmt(data.customer_count)} label={data.customer_label ?? "Customers"} />
+                <Stat value={fmt(data.order_count)} label={data.order_label ?? "Orders"} />
                 <Stat value={`${data.table_count} · ${data.metric_count}`} label="Tables · metrics" />
                 <Stat value={`${startYear}–${endYear}`} label="Years covered" />
               </>

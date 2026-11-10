@@ -12,13 +12,25 @@ export const dynamic = "force-dynamic";
 
 const TENANT = process.env.ACTIVE_TENANT ?? "mro";
 
-// table_count and date range are read live from the warehouse below;
-// metric_count comes from data/metrics.yaml's per-tenant governed metrics
-// (D-033: 26 for mro, 15 for northwind).
-const TENANT_CONFIG =
-  TENANT === "mro"
-    ? { schema: "mro_distributor.", metricCount: 26, customerTable: "dim_customer", orderTable: "o2c_sales_order_line" }
-    : { schema: "", metricCount: 15, customerTable: "dim_customer", orderTable: "fact_sales_order" };
+// table_count and date range are read live from the warehouse below; metric_count is the tenant's governed-metric count in
+// data/metrics.yaml (D-033: 26 for mro, 15 for northwind; D-046: 24 for harborline).
+// D-046: tenant-aware for harborline. Its dim_date spans 2020-2031 (a calendar, not the data horizon), so the date range comes from
+// the loaded positions (min/max position_date_key, YYYYMMDD) instead; its "customers" are clients and its "orders" settlement instructions.
+interface TenantStatsConfig {
+  schema: string; metricCount: number; customerTable: string; orderTable: string;
+  customerLabel?: string; orderLabel?: string; schemaType: string;
+  dateRangeSql?: string; // returns [min_key, max_key] as YYYYMMDD ints; default reads dim_date.full_date
+}
+const TENANT_CONFIGS: Record<string, TenantStatsConfig> = {
+  mro: { schema: "mro_distributor.", metricCount: 26, customerTable: "dim_customer", orderTable: "o2c_sales_order_line", schemaType: "star schema · NetSuite-shaped" },
+  harborline: {
+    schema: "harborline.", metricCount: 24, customerTable: "dim_client", orderTable: "stl_trade_instruction",
+    customerLabel: "Clients", orderLabel: "Settlement instructions", schemaType: "star schema · securities custody",
+    dateRangeSql: "SELECT MIN(position_date_key), MAX(position_date_key) FROM harborline.pos_daily_position",
+  },
+};
+const TENANT_CONFIG: TenantStatsConfig =
+  TENANT_CONFIGS[TENANT] ?? { schema: "", metricCount: 15, customerTable: "dim_customer", orderTable: "fact_sales_order", schemaType: "star schema · NetSuite-shaped" };
 
 export interface WarehouseStats {
   customer_count: number;
@@ -28,6 +40,8 @@ export interface WarehouseStats {
   date_range: { start: string; end: string };
   last_refreshed: string;
   schema_type: string;
+  customer_label?: string;
+  order_label?: string;
 }
 
 interface CacheEntry {
@@ -42,6 +56,11 @@ function toYearMonth(v: unknown): string {
   if (typeof v === "string") return v.slice(0, 7);
   return "—";
 }
+/** YYYYMMDD integer key -> "YYYY-MM-DD" (the cloud/local drivers may hand back number, bigint-as-number or string). */
+function keyToDate(v: unknown): string | null {
+  const s = String(v ?? "");
+  return /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : null;
+}
 
 async function scalar(sql: string): Promise<unknown> {
   const result = await executeSQL(sql, 1);
@@ -49,7 +68,7 @@ async function scalar(sql: string): Promise<unknown> {
 }
 
 async function computeStats(): Promise<WarehouseStats> {
-  const { schema, metricCount, customerTable, orderTable } = TENANT_CONFIG;
+  const { schema, metricCount, customerTable, orderTable, schemaType, customerLabel, orderLabel, dateRangeSql } = TENANT_CONFIG;
   const tableSchemaName = schema ? schema.replace(".", "") : "main";
 
   const customerCount = Number(await scalar(`SELECT COUNT(*) FROM ${schema}${customerTable}`));
@@ -61,8 +80,9 @@ async function computeStats(): Promise<WarehouseStats> {
   );
   // Data horizon (max date actually loaded), NOT wall-clock today — showing
   // "today" would imply live data this warehouse doesn't have (D-038 B3).
-  const dateRow = await executeSQL(`SELECT MIN(full_date), MAX(full_date) FROM ${schema}dim_date`, 1);
-  const [minDate, maxDate] = dateRow.rows[0] ?? [null, null];
+  const dateRow = await executeSQL(dateRangeSql ?? `SELECT MIN(full_date), MAX(full_date) FROM ${schema}dim_date`, 1);
+  const [rawMin, rawMax] = dateRow.rows[0] ?? [null, null];
+  const [minDate, maxDate] = dateRangeSql ? [keyToDate(rawMin), keyToDate(rawMax)] : [rawMin, rawMax];
 
   return {
     customer_count: customerCount,
@@ -71,7 +91,9 @@ async function computeStats(): Promise<WarehouseStats> {
     metric_count: metricCount,
     date_range: { start: toYearMonth(minDate), end: toYearMonth(maxDate) },
     last_refreshed: typeof maxDate === "string" ? maxDate : "—",
-    schema_type: "star schema · NetSuite-shaped",
+    schema_type: schemaType,
+    ...(customerLabel ? { customer_label: customerLabel } : {}),
+    ...(orderLabel ? { order_label: orderLabel } : {}),
   };
 }
 

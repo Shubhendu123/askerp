@@ -37,14 +37,6 @@ interface HistoryItem {
   ts: number;
 }
 
-const SUGGESTED = [
-  "What was our total revenue in 2024?",
-  "Top 5 customers by order count",
-  "Cancellation rate by quarter",
-  "Outdoor furniture gross margin in 2025",
-  "Which customers churned recently?",
-];
-
 function relativeTime(ts: number): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (s < 45) return "just now";
@@ -184,7 +176,7 @@ export default function Workbench({ tenant = getTenantConfig("mro") }: Workbench
         <div className="mt-4 space-y-6">
           {/* Suggested question chips */}
           <div className="flex flex-wrap gap-2">
-            {SUGGESTED.map((q) => (
+            {tenant.suggestedQuestions.map((q) => (
               <button
                 key={q}
                 onClick={() => ask(q)}
