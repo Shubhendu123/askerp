@@ -26,6 +26,7 @@ Rules:
     GOOD: "7 suppliers average 14+ late days yet are paid faster than the 39-day company average" — reports only the group above the gap
   If you scan the column and the values decline smoothly with no gap that stands out, the set is genuinely homogeneous — report the full count, don't invent a break that isn't there.
 - CONSTANT COLUMNS: if a column's value is identical across every row (e.g. a repeated company-wide average), state it once in prose ("company-wide DPO is 39 days") rather than treating it as a per-row finding.
+- POLICY CITATIONS: if (and only if) a "Policy rules retrieved" section is provided and your claim depends on one of those rules, cite it inline in the form (POL-001 §2), using exactly the citation label given. Never cite a policy that is not listed in that section, and never cite when no such section is provided.
 - Output ONLY valid JSON, no markdown.
 
 Output format:
@@ -40,6 +41,7 @@ interface NarrateInput {
   rows: unknown[][];
   row_count: number;
   truncated: boolean;
+  policies?: Array<{ citation: string; text: string }>; // D-045: retrieved policy chunks, the only citable rules
 }
 
 export interface NarrateResult {
@@ -60,7 +62,7 @@ export async function narrate(
   input: NarrateInput,
   tenant: string = process.env.ACTIVE_TENANT ?? "mro"
 ): Promise<NarrateResult> {
-  const { question, metric_used, sentiment, columns, rows, row_count, truncated } = input;
+  const { question, metric_used, sentiment, columns, rows, row_count, truncated, policies } = input;
 
   const userMsg = [
     `Question: ${question}`,
@@ -70,11 +72,14 @@ export async function narrate(
     "",
     "Result data:",
     summariseRows(columns, rows, row_count),
+    ...(policies && policies.length > 0
+      ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}] ${p.text.slice(0, 1200)}`)]
+      : []),
   ].join("\n");
 
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 256,
+    max_tokens: 320,
     system: buildSystem(tenant),
     messages: [{ role: "user", content: userMsg }],
   });

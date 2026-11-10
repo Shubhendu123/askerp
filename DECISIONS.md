@@ -489,3 +489,19 @@ No regression on S02/M08.
 - **Reclaim deadlines are all 2028+**: statutes (36 months; 48 for FR/IT) exceed the 18-month data window, so "unfiled reclaims approaching their deadline" has no near-term rows. A historical-backlog patch (older income payments with nearer deadlines) is a follow-up, in the D-034 additive-patch style.
 - `db_rebuild/` is MRO-specific; a future tidy is `tenants/<name>/` for all generators.
 - Not yet done (D-045/D-046): semantic layer (schema.yaml/metrics.yaml), retriever tenant wiring, app wiring, policy documents.
+
+## D-045 — Policy documents as a third retrieval chunk type
+
+**Status:** Part A implemented · 2026-11-11 · **`policy_refs` expansion and the policy-chunk cap are implemented but NOT yet verified — verification is Gate B (needs metrics carrying `policy_refs`).** Only chunking, chunk IDs, uniqueness and type-checking are verified so far.
+
+**What.** `harborline/policies/POL-001..012.md` (YAML frontmatter + `## ` sections) become retrieval chunks of type `policy`, harborline tenant only (frontmatter `tenant`). One chunk per `## ` section (not per document: too coarse to rank; not per paragraph: loses rule context). Embedded text is `title — section heading` + body. Chunk ID `harborline:POL-001#3` (D-035 tenant prefix; `#n` is the section number from the heading). Duplicate-ID assertion retained. 86 chunks / 12 documents / 0 duplicate IDs.
+
+**Metric → policy links.** Optional `policy_refs:` on metrics: `POL-001` (all sections) or `POL-001#2` (one section). On retrieval of a metric chunk, expansion appends the referenced policy chunks deterministically (D-041 mechanism for `tables:`). Build-time assertion: every `policy_refs` entry must resolve to a real policy doc/section of the same tenant.
+
+**Anti-crowding cap.** Policy chunks also rank directly, so a policy-heavy question could crowd out metrics/tables — the failure D-041 diagnosed. Ranked + expanded policy chunks combined are capped at `RETRIEVAL_MAX_POLICY_CHUNKS` (default 3). Policy chunks beyond the cap are skipped in ranking, so their slots go to the next non-policy chunk.
+
+**Use.** SQL generator: policy chunks supply thresholds/rules, which it may embed as literals; it must not invent a threshold absent from a retrieved policy (and returns null SQL naming the missing rule). Narrator: cites `(POL-001 §2)` inline only for policies actually retrieved. Retrieval panel: distinct `POLICY` badge; policy chunks always listed even beyond the top 5.
+
+**Deployment.** Policies are discovered via `fs.readdirSync`, invisible to Next's static file tracing → `experimental.outputFileTracingIncludes` for `/api/ask` in `next.config.mjs` (otherwise production silently has zero policy chunks).
+
+**Also changed.** Corpus embedding is batched (64/call); Voyage caps a call at 128 inputs and the corpus is growing past that.

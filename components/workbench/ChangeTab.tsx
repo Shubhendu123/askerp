@@ -423,7 +423,7 @@ export default function ChangeTab({ response, loading }: Props) {
               name: string;
               score: number;
               text: string;
-            }>).slice(0, 5).map((r) => (
+            }>).filter((r, i, all) => i < 5 || r.type === "policy").map((r) => ( // D-045: policy chunks always shown, beyond the top 5
               <div
                 key={r.id}
                 className="flex items-start gap-3 p-2"
@@ -432,15 +432,15 @@ export default function ChangeTab({ response, loading }: Props) {
                 <span
                   className="text-[9px] uppercase font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5"
                   style={{
-                    background: r.type === "metric" ? "var(--accent)" : "var(--text-tertiary)",
+                    background: r.type === "metric" ? "var(--accent)" : r.type === "policy" ? "#7c3aed" : "var(--text-tertiary)",
                     color: "#fff",
                   }}
                 >
-                  {r.type}
+                  {r.type === "policy" ? "POLICY" : r.type}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>
-                    {formatTitle(r.name)}
+                    {r.type === "policy" ? r.name : formatTitle(r.name)}
                     <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--text-tertiary)" }}>
                       score {r.score.toFixed(4)}
                     </span>

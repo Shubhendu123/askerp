@@ -127,7 +127,12 @@ function buildRetrievedSystem(chunks: RetrievalResult[], tenant: string): string
   const metricSection = metrics.length > 0
     ? `RETRIEVED METRIC CONTEXT (top ${metrics.length} relevant metrics):\n${metrics.map((c) => c.text).join("\n\n")}`
     : "";
-  return [tenantBase(tenant), tableSection, metricSection, tenantRules(tenant)].filter(Boolean).join("\n\n");
+  // D-045: policy chunks supply thresholds and rules; the generator may embed them in SQL but must not invent any.
+  const policies = chunks.filter((c) => c.type === "policy");
+  const policySection = policies.length > 0
+    ? `RETRIEVED POLICY CONTEXT (${policies.length} policy sections):\n${policies.map((c) => `[${c.policy?.citation ?? c.id}] ${c.text}`).join("\n\n")}\n\nPOLICY RULE: thresholds, targets and criteria used in SQL must come from the policy sections above (embed them as literals). Never invent a threshold that is not in a retrieved policy section; if the question depends on a rule that is not retrieved, set "sql" to null and say which rule is missing.`
+    : "";
+  return [tenantBase(tenant), tableSection, metricSection, policySection, tenantRules(tenant)].filter(Boolean).join("\n\n");
 }
 
 const FEW_SHOT_MRO = `FEW-SHOT EXAMPLES:
