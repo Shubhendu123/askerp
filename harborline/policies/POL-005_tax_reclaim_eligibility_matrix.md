@@ -6,6 +6,13 @@ domain: tax
 effective_date: 2025-01-01
 version: 5.1
 owner: Head of Tax Services
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [cae_income_payment, dim_market.tax_reclaim_complexity, dim_client.domicile_country, dim_client.client_segment]
 governs: "individual income payments / reclaim claims, by client and market"
 ---

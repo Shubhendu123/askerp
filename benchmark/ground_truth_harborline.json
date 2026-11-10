@@ -589,5 +589,408 @@
  "P05": {
   "sql": "WITH rev AS (SELECT client_key, SUM(invoiced_amount_usd) inv, SUM(billable_amount_usd-invoiced_amount_usd) FILTER (WHERE waiver_reason='SLA_CREDIT') sla, SUM(invoiced_amount_usd) FILTER (WHERE fee_type='OVERDRAFT') odf FROM harborline.clt_fee_invoice GROUP BY 1), pen AS (SELECT client_key, SUM(penalty_amount_usd) p FROM harborline.stl_fail_penalty WHERE bearer='HARBORLINE' GROUP BY 1), fund AS (SELECT client_key, SUM(funding_cost_usd) f FROM harborline.pos_cash_balance GROUP BY 1), svc AS (SELECT client_key, SUM(analyst_hours)*85 s FROM harborline.clt_service_request GROUP BY 1) SELECT c.client_name, ROUND(rev.inv-COALESCE(pen.p,0)-GREATEST(COALESCE(fund.f,0)-COALESCE(rev.odf,0),0)-COALESCE(rev.sla,0)-COALESCE(svc.s,0),2) AS profitability_usd FROM harborline.dim_client c JOIN rev USING(client_key) LEFT JOIN pen USING(client_key) LEFT JOIN fund USING(client_key) LEFT JOIN svc USING(client_key) WHERE rev.inv-COALESCE(pen.p,0)-GREATEST(COALESCE(fund.f,0)-COALESCE(rev.odf,0),0)-COALESCE(rev.sla,0)-COALESCE(svc.s,0) < 0 ORDER BY 2",
   "result": []
+ },
+ "D01": {
+  "sql": "SELECT c.client_name, ROUND(100.0*COUNT(*) FILTER (WHERE i.actual_settle_date_key=i.intended_settle_date_key)/COUNT(*),2) AS settlement_rate_pct, 98.5 AS target_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c USING(client_key) JOIN harborline.dim_date d ON d.date_key=i.intended_settle_date_key WHERE c.client_name='Eastgate Capital Partners' AND d.year_num=2026 AND d.month_num=9 AND i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1",
+  "result": [
+   [
+    "Eastgate Capital Partners",
+    93.42,
+    98.5
+   ]
+  ],
+  "facts": [
+   "98\\.5",
+   "99\\.0?"
+  ],
+  "doc_only": false
+ },
+ "D02": {
+  "sql": "SELECT c.client_name, x.event_key, x.estimated_client_impact_usd, LEAST(x.estimated_client_impact_usd, 2000000) AS owed_under_cap_usd FROM harborline.cae_client_election x JOIN harborline.dim_client c USING(client_key) WHERE c.client_name='Pinnacle Asset Management' AND x.event_key=2630 AND x.missed_deadline",
+  "result": [
+   [
+    "Pinnacle Asset Management",
+    2630,
+    5000000.0,
+    2000000.0
+   ]
+  ],
+  "facts": [
+   "2(\\.0)?\\s*(M|million)|2,000,000",
+   "gross negligence|legal"
+  ],
+  "doc_only": false
+ },
+ "D03": {
+  "sql": "SELECT c.client_name, x.event_key, x.election_status, x.estimated_client_impact_usd FROM harborline.cae_client_election x JOIN harborline.dim_client c USING(client_key) WHERE c.client_name='Vantage Sovereign Investment Authority' AND x.event_key=2704",
+  "result": [
+   [
+    "Vantage Sovereign Investment Authority",
+    2704,
+    "MISSED_DEADLINE",
+    5000000.0
+   ]
+  ],
+  "facts": [
+   "cash",
+   "(standing instruction)",
+   "shares"
+  ],
+  "doc_only": false
+ },
+ "D04": {
+  "sql": null,
+  "result": [],
+  "facts": [
+   "17:00"
+  ],
+  "doc_only": true
+ },
+ "D05": {
+  "sql": null,
+  "result": [],
+  "facts": [
+   "16:00"
+  ],
+  "doc_only": true
+ },
+ "D06": {
+  "sql": null,
+  "result": [],
+  "facts": [
+   "30\\s*%",
+   "pro.?rata|scaled"
+  ],
+  "doc_only": true
+ },
+ "D07": {
+  "sql": "SELECT c.client_name, x.event_key, x.estimated_client_impact_usd FROM harborline.cae_client_election x JOIN harborline.dim_client c USING(client_key) WHERE c.client_name='Westmark Sovereign Investment Authority' AND x.event_key=2751 AND x.missed_deadline",
+  "result": [
+   [
+    "Westmark Sovereign Investment Authority",
+    2751,
+    3950916.3
+   ]
+  ],
+  "facts": [
+   "additional acceptance|acceptance period",
+   "interest",
+   "no cap|uncapped|in full"
+  ],
+  "doc_only": false
+ },
+ "D08": {
+  "sql": null,
+  "result": [],
+  "facts": [
+   "no improvement",
+   "tier D|tier-D"
+  ],
+  "doc_only": true
+ },
+ "D09": {
+  "sql": "SELECT c.client_name, COUNT(*) FILTER (WHERE p.bearer='HARBORLINE') AS harborline_borne_penalties, COUNT(*) AS penalties, ROUND(100.0*COUNT(*) FILTER (WHERE p.bearer='HARBORLINE')/COUNT(*),2) AS harborline_borne_pct FROM harborline.stl_fail_penalty p JOIN harborline.dim_client c USING(client_key) WHERE c.client_name='Eastgate Capital Partners' GROUP BY 1",
+  "result": [
+   [
+    "Eastgate Capital Partners",
+    2320,
+    10503,
+    22.09
+   ]
+  ],
+  "facts": [
+   "instruction.?processing|processing error|own error"
+  ],
+  "doc_only": false
+ },
+ "D10": {
+  "sql": "SELECT ip.income_payment_key, ip.actual_date_key, ip.reclaim_amount_usd FROM harborline.cae_income_payment ip JOIN harborline.dim_client c USING(client_key) JOIN harborline.dim_date d ON d.date_key=ip.actual_date_key WHERE c.client_name='Westmark Sovereign Investment Authority' AND ip.reclaim_eligible AND NOT ip.reclaim_filed AND d.full_date + INTERVAL 90 DAY < DATE '2026-10-22' ORDER BY ip.actual_date_key",
+  "result": [
+   [
+    1361,
+    20250502,
+    267962.63
+   ],
+   [
+    2001,
+    20250505,
+    75168.16
+   ],
+   [
+    1271,
+    20250505,
+    1961108.42
+   ],
+   [
+    6025,
+    20250512,
+    105702.86
+   ],
+   [
+    5590,
+    20250513,
+    1095910.07
+   ],
+   [
+    977,
+    20250519,
+    1423872.18
+   ],
+   [
+    2769,
+    20250527,
+    943130.72
+   ],
+   [
+    984,
+    20250603,
+    597959.76
+   ],
+   [
+    198,
+    20250616,
+    402316.36
+   ],
+   [
+    673,
+    20250707,
+    344230.56
+   ],
+   [
+    628,
+    20250714,
+    763570.68
+   ],
+   [
+    5061,
+    20250714,
+    609645.86
+   ],
+   [
+    1133,
+    20250714,
+    182586.43
+   ],
+   [
+    1432,
+    20250721,
+    1050100.56
+   ],
+   [
+    4087,
+    20250728,
+    854418.25
+   ],
+   [
+    1273,
+    20250804,
+    1961108.42
+   ],
+   [
+    5653,
+    20250814,
+    279723.04
+   ],
+   [
+    3234,
+    20250820,
+    4760443.31
+   ],
+   [
+    3939,
+    20250822,
+    752193.75
+   ],
+   [
+    3305,
+    20250902,
+    379267.11
+   ],
+   [
+    4094,
+    20250912,
+    1026398.96
+   ],
+   [
+    34,
+    20250926,
+    576680.15
+   ],
+   [
+    1042,
+    20250930,
+    1717814.32
+   ],
+   [
+    6197,
+    20251026,
+    1418329.14
+   ],
+   [
+    2005,
+    20251103,
+    75168.16
+   ],
+   [
+    5999,
+    20251107,
+    1055819.33
+   ],
+   [
+    2417,
+    20251125,
+    195880.0
+   ],
+   [
+    5174,
+    20251215,
+    932413.51
+   ],
+   [
+    5186,
+    20251220,
+    1975006.04
+   ],
+   [
+    678,
+    20260105,
+    344230.56
+   ],
+   [
+    1141,
+    20260112,
+    182586.43
+   ],
+   [
+    6186,
+    20260112,
+    149358.29
+   ],
+   [
+    5069,
+    20260112,
+    609645.86
+   ],
+   [
+    2205,
+    20260202,
+    653277.14
+   ],
+   [
+    1277,
+    20260203,
+    1961108.42
+   ],
+   [
+    3046,
+    20260209,
+    665774.32
+   ],
+   [
+    5656,
+    20260212,
+    279723.04
+   ],
+   [
+    2420,
+    20260217,
+    195880.0
+   ],
+   [
+    3947,
+    20260220,
+    752193.75
+   ],
+   [
+    2924,
+    20260305,
+    12397861.28
+   ],
+   [
+    1145,
+    20260413,
+    182586.43
+   ],
+   [
+    5717,
+    20260420,
+    455694.44
+   ],
+   [
+    3075,
+    20260430,
+    129788.88
+   ],
+   [
+    2009,
+    20260504,
+    75168.16
+   ],
+   [
+    1363,
+    20260504,
+    267962.63
+   ],
+   [
+    5593,
+    20260513,
+    1095910.07
+   ],
+   [
+    979,
+    20260519,
+    1423872.18
+   ],
+   [
+    1587,
+    20260604,
+    988408.52
+   ],
+   [
+    5179,
+    20260615,
+    932413.51
+   ],
+   [
+    218,
+    20260615,
+    402316.36
+   ],
+   [
+    4964,
+    20260629,
+    405939.29
+   ],
+   [
+    1436,
+    20260720,
+    1050100.56
+   ]
+  ],
+  "facts": [
+   "90"
+  ],
+  "doc_only": false
+ },
+ "D11": {
+  "sql": "SELECT c.client_name, ROUND(100.0*COUNT(*) FILTER (WHERE i.actual_settle_date_key=i.intended_settle_date_key)/COUNT(*),2) AS settlement_rate_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c USING(client_key) WHERE c.client_name='Redwood Asset Management' AND i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1",
+  "result": [
+   [
+    "Redwood Asset Management",
+    96.38
+   ]
+  ],
+  "facts": [
+   "%"
+  ],
+  "doc_only": false
+ },
+ "D12": {
+  "sql": null,
+  "result": [],
+  "facts": [
+   "11 October 2027|October 11, 2027|2027-10-11"
+  ],
+  "doc_only": true
  }
 }

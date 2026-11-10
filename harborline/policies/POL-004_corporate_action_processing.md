@@ -6,6 +6,13 @@ domain: corporate_actions
 effective_date: 2025-01-01
 version: 3.0
 owner: Head of Asset Servicing
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [cae_event, cae_client_election, dim_client.sla_tier, dim_market]
 governs: "individual corporate action events and client elections"
 ---

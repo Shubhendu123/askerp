@@ -6,6 +6,13 @@ domain: settlement
 effective_date: 2025-01-01
 version: 2.1
 owner: Head of Settlements
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [dim_market.penalty_regime, stl_fail_penalty, stl_trade_instruction, dim_security.security_type]
 governs: "individual failed settlement instructions and the party that bears each penalty"
 ---

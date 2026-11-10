@@ -431,7 +431,8 @@ export default function ChangeTab({ response, loading }: Props) {
               name: string;
               score: number;
               text: string;
-            }>).filter((r, i) => i < 5 || r.type === "policy").map((r) => ( // D-045: policy chunks always shown, beyond the top 5
+              policy?: { doc_type?: string; access_level?: string; citation?: string };
+            }>).filter((r, i) => i < 5 || r.type === "policy" || r.type === "document").map((r) => ( // D-045/D-048: policy + document chunks always shown, beyond the top 5
               <div
                 key={r.id}
                 className="flex items-start gap-3 p-2"
@@ -440,15 +441,18 @@ export default function ChangeTab({ response, loading }: Props) {
                 <span
                   className="text-[9px] uppercase font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5"
                   style={{
-                    background: r.type === "metric" ? "var(--accent)" : r.type === "policy" ? "#7c3aed" : "var(--text-tertiary)",
+                    background: r.type === "metric" ? "var(--accent)" : r.type === "policy" ? "#7c3aed" : r.type === "document" ? "#0f766e" : "var(--text-tertiary)",
                     color: "#fff",
                   }}
                 >
-                  {r.type === "policy" ? "POLICY" : r.type}
+                  {r.type === "policy" ? "POLICY" : r.type === "document" ? (r.policy?.doc_type ?? "document").replace("_", " ") : r.type}
                 </span>
+                {r.policy?.access_level === "CONFIDENTIAL" && (
+                  <span className="text-[9px] uppercase font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: "#b91c1c", color: "#fff" }}>CONFIDENTIAL</span> // D-048: carried and shown, not enforced (no user identity)
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>
-                    {r.type === "policy" ? r.name : formatTitle(r.name)}
+                    {r.type === "policy" || r.type === "document" ? r.name : formatTitle(r.name)}
                     <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--text-tertiary)" }}>
                       score {r.score.toFixed(4)}
                     </span>

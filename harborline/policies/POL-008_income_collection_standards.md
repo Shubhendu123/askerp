@@ -6,6 +6,13 @@ domain: asset_servicing
 effective_date: 2025-01-01
 version: 2.2
 owner: Head of Asset Servicing
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [cae_income_payment, cae_event, dim_client.sla_tier, pos_cash_balance]
 governs: "individual income payments"
 ---

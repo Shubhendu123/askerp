@@ -6,6 +6,13 @@ domain: billing
 effective_date: 2025-01-01
 version: 6.0
 owner: Head of Product and Pricing
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [clt_fee_invoice, dim_client.client_segment, dim_client.sla_tier, pos_daily_position]
 governs: "individual clients (fees, waivers, profitability)"
 ---

@@ -6,6 +6,13 @@ domain: risk
 effective_date: 2025-01-01
 version: 2.0
 owner: Head of Operational Risk
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [dim_counterparty.reliability_tier, stl_trade_instruction, stl_fail_penalty]
 governs: "individual counterparties (tiers apply to a counterparty, never to Harborline or a client)"
 ---

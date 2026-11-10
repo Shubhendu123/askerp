@@ -6,6 +6,13 @@ domain: operations
 effective_date: 2025-01-01
 version: 1.8
 owner: Head of Reconciliations
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [rec_break, dim_subcustodian, stl_trade_instruction]
 governs: "individual reconciliation breaks"
 ---

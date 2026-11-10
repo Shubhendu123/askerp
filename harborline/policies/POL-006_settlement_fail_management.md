@@ -6,6 +6,13 @@ domain: settlement
 effective_date: 2025-01-01
 version: 2.4
 owner: Head of Settlements
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [stl_trade_instruction.days_failed, stl_trade_instruction.fail_reason_code, dim_counterparty.reliability_tier, dim_client.sla_tier]
 governs: "individual failed settlement instructions (ageing and escalation)"
 ---

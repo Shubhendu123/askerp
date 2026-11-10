@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateSQL, getTenantSchemaInfo, USE_RETRIEVAL, DEFAULT_TENANT } from "@/lib/sqlGenerator";
 import { runWithValidation } from "@/lib/sqlValidator";
-import { narrate } from "@/lib/narrator";
+import { narrate, toNarratorDocs, citesAny } from "@/lib/narrator";
+import { enrichDocuments } from "@/lib/retrieval/retriever";
 import { executeSQL } from "@/lib/db";
 import { retrieveWithRanker, expansionEnabled } from "@/lib/retrieval/retriever";
 import { recordTrace, type TraceData } from "@/lib/tracing";
@@ -146,6 +147,18 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
     if (genException && cls === "other") {
       return NextResponse.json({ question, error: "sql_generation_failed", detail: genException, validation, ...retrievalInfo }, { status: 500 });
     }
+    // D-048 NO_SQL: the retrieved documents fully answer the question. Only valid when the narration cites a retrieved document.
+    const gen0 = lastGen as Awaited<ReturnType<typeof generateSQL>> | null;
+    const docs0 = toNarratorDocs(retrievalResp.results);
+    if (cls === "refusal" && (gen0?.answer_from_documents || docs0.some((d) => d.doc_type !== "policy")) && docs0.length > 0) { // flag, or a refusal while governed documents are in context: the narration must still cite one
+      try {
+        const nn = await narrate({ question, metric_used: null, sentiment: gen0?.sentiment ?? null, columns: [], rows: [], row_count: 0, truncated: false, policies: docs0, noSql: true }, DEFAULT_TENANT);
+        if (citesAny(nn.narrative + " " + nn.headline, docs0)) {
+          return NextResponse.json({ question, sql: null, no_sql: true, headline: nn.headline, narrative: nn.narrative, columns: [], rows: [], row_count: 0,
+            reasoning: gen0?.reasoning ?? null, validation, ...retrievalInfo, error: null });
+        }
+      } catch { /* fall through to refusal */ }
+    }
     if (cls === "refusal") {
       return NextResponse.json({
         question, sql: null, error: "no_sql_generated",
@@ -164,6 +177,10 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
   const execResult = outcome.result as Exec;
   const finalSql = outcome.finalSql;
 
+  // Step 2b (D-048): post-SQL enrichment - documents linked to the result rows (event_key / client / counterparty), cap 3
+  let enriched: Awaited<ReturnType<typeof enrichDocuments>> = [];
+  try { enriched = await enrichDocuments(question, execResult.columns, execResult.rows as unknown[][], DEFAULT_TENANT, retrievalResp.results.map((r) => r.id)); } catch { /* non-fatal */ }
+
   // Step 3: Narrate (non-fatal)
   let headline = "";
   let narrative = "";
@@ -179,7 +196,7 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
       row_count: execResult.row_count,
       truncated: execResult.truncated,
       sql: finalSql,
-      policies: retrievalResp.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text, governs: r.policy?.governs })),
+      policies: [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)],
     }, DEFAULT_TENANT);
     narrateTimeMs = Date.now() - t;
     headline = n.headline;
@@ -207,6 +224,7 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
     total_time_ms: Date.now() - t_start,
     validation,
     ...retrievalInfo,
+    enriched_documents: enriched,
     error: null,
   });
 }

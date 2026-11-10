@@ -52,6 +52,41 @@ def fidelity_scope(rec):
     if re.search(r"POL-007", text) and not uses_cp: scope.append("cites POL-007 without a per-counterparty SQL")
     return {"window_claims": win, "window_bad": window_bad, "scope_viol": scope}
 
+# D-048 DOC tier ---------------------------------------------------------------------------------------------------------------
+import pathlib, yaml as _yaml
+_AGR = {}   # client_agreement doc_id -> client name (for the confidential-leakage check)
+for _f in pathlib.Path("harborline/corpus/client_agreements").glob("*.md"):
+    _fm = _yaml.safe_load(_f.read_text().split("---", 2)[1]); _AGR[_fm["doc_id"]] = _fm["entities"]["client"]
+
+def leakage(rec):
+    """client_agreement chunks (retrieved or attached post-SQL) whose client the question does not name. Must be 0."""
+    q = (rec.get("question") or "").lower(); bad = []
+    for cid in list(rec.get("retrieved_chunk_ids") or []) + list(rec.get("enriched_chunk_ids") or []):
+        m = re.match(r"harborline:(CA-\d+)#", cid)
+        if m and _AGR.get(m.group(1), "").split()[0].lower() not in q: bad.append(cid)
+    return bad
+
+def doc_scores(rec, q):
+    text = (rec.get("narrative") or "") + " " + (rec.get("headline") or "")
+    got = set(rec.get("retrieved_chunk_ids") or []) | set(rec.get("enriched_chunk_ids") or [])
+    req = set(q["expected"].get("policies", [])) | set(q["expected"].get("documents", []))
+    out = {"doc_cov": round(len(got & req) / len(req), 4) if req else None}
+    facts = GT[rec["id"]].get("facts") or []
+    out["fact_cov"] = round(sum(1 for f in facts if re.search(f, text, re.I)) / len(facts), 4) if facts and text.strip() else (0.0 if facts else None)
+    prec = q.get("precedence")
+    if prec: out["precedence_ok"] = bool(all(p in text for p in prec) and re.search(r"overrid|prevail|supersed|instead of|rather than|notwithstanding|not the standard", text, re.I))
+    ver = q.get("version")
+    if ver: out["version_ok"] = bool(re.search(ver["must"], text) and not re.search(ver["must_not"], text))
+    out["leak"] = leakage(rec)
+    cites = re.findall(r"\(([A-Z]{2,3}-[A-Za-z0-9-]+?)(?: v([\d.]+))? §(\d+)\)", text)   # (CA-001 §2) / (MG-IT v2.0 §1)
+    bad = [f"{d}{(' v' + v) if v else ''} §{n}" for d, v, n in cites if not any(g == f"harborline:{d}#{n}" or g == f"harborline:{d}@{v}#{n}" for g in got) and not d.startswith("POL")]
+    out["doc_cite_acc"] = None if not [c for c in cites if not c[0].startswith("POL")] else round(1 - len(bad) / len([c for c in cites if not c[0].startswith("POL")]), 4); out["bad_doc_cites"] = bad
+    if q.get("forbid_agreement"): out["ca_chunks"] = sum(1 for i in got if re.match(r"harborline:CA-\d+#", i))
+    return out
+
+def citation_present(rec):
+    return bool(re.search(r"\((?:[A-Z]{2,3}-[A-Za-z0-9.-]+)(?: v[\d.]+)? §\d+", (rec.get("narrative") or "")))
+
 def score(rec):
     q = Q[rec["id"]]; got = list(rec.get("retrieved_chunk_ids") or []); gs = set(got)
     out = {"R_recall": None, "R_precision": None, "table_cov": None, "policy_cov": None, "A": None, "ctrl_ok": None, "ctrl_note": None}
@@ -69,14 +104,18 @@ def score(rec):
         out["ctrl_ok"] = (len(foreign) == 0) and declined
         out["ctrl_note"] = f"cross-tenant chunks {len(foreign)}; " + ("declined" if declined else "ANSWERED (fabricated?)")
         return out
-    exp = q["expected"]; req = set(exp["primary"]) | set(exp["tables"]) | set(exp.get("policies", []))
+    exp = q["expected"]; req = set(exp["primary"]) | set(exp["tables"]) | set(exp.get("policies", [])) | set(exp.get("documents", []))
+    if q["tier"] == "DOC": out.update(doc_scores(rec, q))
     hit = gs & req
     out["R_recall"] = round(len(hit) / len(req), 4) if req else None
     out["R_precision"] = round(len(hit) / len(gs), 4) if gs else 0.0
     out["table_cov"] = round(len(gs & set(exp["tables"])) / len(exp["tables"]), 4) if exp["tables"] else None
     pol = set(exp.get("policies", []))
     out["policy_cov"] = round(len(gs & pol) / len(pol), 4) if pol else None
-    if not GT[rec["id"]]["result"]:
+    if GT[rec["id"]].get("doc_only"):   # D-048: answered from documents. 3 = NO_SQL (or SQL) answer with every expected fact and a cited document; 2 = all facts; 1 = some facts; 0 = none / API failure never reaches here
+        fc = out.get("fact_cov") or 0.0; cited = rec.get("no_sql_cited") or citation_present(rec)
+        out["A"] = 3 if (fc == 1.0 and cited) else 2 if fc == 1.0 else 1 if fc >= 0.5 else 0
+    elif not GT[rec["id"]]["result"]:
         rows = rec.get("result_rows")
         out["A"] = 0 if (not rec.get("sql_valid") or rows is None) else (3 if len(rows) == 0 else 1)
     else:

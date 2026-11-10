@@ -11,6 +11,8 @@ const POLICY_RULE = `- POLICY CITATIONS: if a "Policy rules retrieved" section i
 
 // D-048: narration fidelity. The narrator describes time window / filters / grain only as they appear in the executed SQL.
 const FIDELITY_RULE = `- FIDELITY: describe the time window, filters and grain ONLY as stated in the "Executed SQL facts" section. If it says there is no date filter, do not state or imply any period (no "trailing 12 months", "last quarter", "year to date", "recent", "this year"); say nothing about the period, or say "across all periods in the data". Mention a filter (e.g. only settled/failed instructions, a market or status) only if it is listed. Do not add context the SQL does not support.`;
+// D-048: appended only when non-policy documents (agreements, guides, notices, incident reports, regulation) are supplied.
+const DOC_RULE = `- DOCUMENTS & PRECEDENCE: documents are cited in the form shown, e.g. (CA-001 §2), (MG-IT v2.0 §1), (EVT-2630 §3). When a client agreement or regulation overrides a standard policy for this answer, say so explicitly and cite BOTH, e.g. "Eastgate's agreement sets 98.5% (CA-001 §2), overriding the standard PLATINUM 99.0% (POL-001 §2)". Use only the document version shown; never mention superseded versions. Take every number from the result data or the document text - never invent amounts. When a client agreement chunk and the policy chunk it overrides are both provided, the narrative MUST name both values and contain both citations plus the word "overrides" or "instead of" (e.g. "98.5% (CA-001 §2) instead of the standard 99.0% (POL-001 §2)"); when a contract caps or extends a liability, state the cap or extension and what the data amount would be without it. If no result rows were produced because no SQL was run, answer only from the documents and cite at least one.`;
 const FIDELITY_TENANTS = new Set(["harborline"]);
 
 /** Deterministic facts about the executed SQL: its WHERE/HAVING/ON predicates and whether any date filter exists. */
@@ -40,7 +42,7 @@ export function sqlFacts(sql: string): string {
   ].join("\n");
 }
 
-function buildSystem(tenant: string, withPolicies = false): string {
+function buildSystem(tenant: string, withPolicies = false, withDocs = false): string {
   const company = getTenantConfig(tenant).llmDescriptor;
   const base = `You are a concise data analyst narrator for ${company}.
 You receive a business question, the SQL result, and metric metadata. Write a tight, factual interpretation.
@@ -67,6 +69,7 @@ Output format:
 {"headline": "...", "narrative": "..."}`;
   let out = base;
   if (withPolicies) out = out.replace("- Output ONLY valid JSON", `${POLICY_RULE}\n- Output ONLY valid JSON`);
+  if (withDocs) out = out.replace("- Output ONLY valid JSON", `${DOC_RULE}\n- Output ONLY valid JSON`);
   if (FIDELITY_TENANTS.has(tenant)) out = out.replace("- Output ONLY valid JSON", `${FIDELITY_RULE}\n- Output ONLY valid JSON`);
   return out;
 }
@@ -80,7 +83,9 @@ interface NarrateInput {
   row_count: number;
   truncated: boolean;
   sql?: string; // D-048: the executed SQL; its filters are passed to the narrator (fidelity tenants only)
-  policies?: Array<{ citation: string; text: string; governs?: string }>; // D-045: retrieved policy chunks, the only citable rules
+  policies?: Array<{ citation: string; text: string; governs?: string; doc_type?: string; authority_rank?: number | null; access_level?: string }>;
+  noSql?: boolean;       // D-048: no SQL was run; answer from the documents only
+  enrichedCitations?: string[]; // D-048: citations of documents attached after the SQL ran (two-stage retrieval) // D-045: retrieved policy chunks, the only citable rules
 }
 
 export interface NarrateResult {
@@ -101,7 +106,7 @@ export async function narrate(
   input: NarrateInput,
   tenant: string = process.env.ACTIVE_TENANT ?? "mro"
 ): Promise<NarrateResult> {
-  const { question, metric_used, sentiment, columns, rows, row_count, truncated, policies, sql } = input;
+  const { question, metric_used, sentiment, columns, rows, row_count, truncated, policies, sql, noSql } = input;
 
   const userMsg = [
     `Question: ${question}`,
@@ -110,17 +115,17 @@ export async function narrate(
     `Rows returned: ${row_count}${truncated ? " (truncated at 100)" : ""}`,
     "",
     "Result data:",
-    summariseRows(columns, rows, row_count),
+    noSql ? "No SQL was run for this question; answer from the documents below only." : summariseRows(columns, rows, row_count),
     ...(sql && FIDELITY_TENANTS.has(tenant) ? ["", "Executed SQL facts:", sqlFacts(sql)] : []),
     ...(policies && policies.length > 0
-      ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}]${p.governs ? ` (governs: ${p.governs})` : ""} ${p.text.slice(0, 1200)}`)]
+      ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}]${p.governs ? ` (governs: ${p.governs})` : ""}${p.doc_type && p.doc_type !== "policy" ? ` (${p.doc_type}, authority_rank ${p.authority_rank ?? "n/a"}, ${p.access_level ?? ""})` : ""} ${p.text.slice(0, 1200)}`)]
       : []),
   ].join("\n");
 
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 320,
-    system: buildSystem(tenant, !!(policies && policies.length > 0)),
+    system: buildSystem(tenant, !!(policies && policies.length > 0), !!(policies && policies.some((p) => p.doc_type && p.doc_type !== "policy"))),
     messages: [{ role: "user", content: userMsg }],
   });
 
@@ -144,4 +149,17 @@ export async function narrate(
       usage,
     };
   }
+}
+
+/** D-048: map retrieved policy/document chunks to the narrator's citable-document list. */
+export function toNarratorDocs(results: Array<{ type: string; id: string; text: string; policy?: { citation: string; governs?: string; doc_type?: string; authority_rank?: number | null; access_level?: string } }>) {
+  return results.filter((r) => r.type === "policy" || r.type === "document").map((r) => ({
+    citation: r.policy?.citation ?? r.id, text: r.text, governs: r.policy?.governs,
+    doc_type: r.policy?.doc_type, authority_rank: r.policy?.authority_rank, access_level: r.policy?.access_level,
+  }));
+}
+
+/** D-048: a NO_SQL answer must cite at least one of the documents it was given; otherwise it is treated as a refusal. */
+export function citesAny(text: string, docs: Array<{ citation: string }>): boolean {
+  return docs.some((d) => text.includes(`(${d.citation}`) || text.includes(d.citation));
 }

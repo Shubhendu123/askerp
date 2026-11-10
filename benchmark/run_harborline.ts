@@ -22,10 +22,10 @@ const LABEL = (() => { const i = process.argv.indexOf("--label"); return i >= 0 
 process.env.ACTIVE_TENANT = REGRESSION ? "mro" : "harborline";
 
 async function main() {
-  const { retrieveWithRanker, retrieveAll } = await import("../lib/retrieval/retriever");
+  const { retrieveWithRanker, retrieveAll, enrichDocuments } = await import("../lib/retrieval/retriever");
   const { generateSQL, getTenantSchemaInfo } = await import("../lib/sqlGenerator");
   const { runWithValidation } = await import("../lib/sqlValidator");
-  const { narrate } = await import("../lib/narrator");
+  const { narrate, toNarratorDocs, citesAny } = await import("../lib/narrator");
   const { executeSQL } = await import("../lib/db");
   const { estimateCostUsd } = await import("../lib/pricing");
 
@@ -33,8 +33,10 @@ async function main() {
   const K = Number(arg("--k", "10")), MODE = arg("--mode", "rrf") as "rrf" | "bm25" | "dense" | "schema"; // D-047 ablation; defaults = production
   const tenant = REGRESSION ? "mro" : "harborline";
   const cfg = JSON.parse(fs.readFileSync(REGRESSION ? "benchmark/questions.json" : "benchmark/questions_harborline.json", "utf-8"));
+  const TIER = arg("--tier", ""); // e.g. DOC (D-048); default = the original 30 questions
   const qs: Array<{ id: string; tier: string; question: string }> = REGRESSION
-    ? cfg.questions.filter((q: { id: string }) => ["S02", "M08"].includes(q.id)) : cfg.questions;
+    ? cfg.questions.filter((q: { id: string }) => ["S02", "M08"].includes(q.id))
+    : TIER ? cfg.questions.filter((q: { tier: string }) => q.tier === TIER) : cfg.questions.filter((q: { tier: string }) => q.tier !== "DOC");
   const runId = `${REGRESSION ? "mro-regression" : "harborline"}_${LABEL}_${new Date().toISOString().replace(/[:.]/g, "-")}_${crypto.randomBytes(2).toString("hex")}`;
   fs.mkdirSync("benchmark/runs_harborline", { recursive: true });
   const file = `benchmark/runs_harborline/${runId}.jsonl`;
@@ -62,25 +64,43 @@ async function main() {
       execute: async (s) => executeSQL(s),
     });
     tin += out.attempts.reduce((a, x) => a + (x.tokens_in ?? 0), 0); tout += out.attempts.reduce((a, x) => a + (x.tokens_out ?? 0), 0);
+    // API failures are not answers: a credit/billing/rate-limit error aborts the run unscored (never counted as a wrong answer)
+    const apiErr = out.attempts.map((a) => a.error_message ?? "").concat(out.final_error_message ?? "").find((m) => /credit balance|billing|rate.?limit|\b429\b|overloaded|insufficient/i.test(m));
+    if (apiErr) {
+      console.log(`ABORTED: API credits/limits (${String(apiErr).slice(0, 90)}) at ${q.id} - run not scored`);
+      if (fs.existsSync(file)) fs.renameSync(file, file.replace(/\.jsonl$/, ".ABORTED_API_CREDITS.txt"));
+      process.exit(3);
+    }
     const refused = out.final_error_class === "refusal";
     const exec = out.ok ? (out.result as Exec) : null;
     let headline = "", narrative = "", ntin = 0, ntout = 0;
+    let enrichedIds: string[] = [], noSql = false, noSqlCited = false;
+    const docs = toNarratorDocs(ret.results);
     if (exec) {
       try {
+        // D-048 post-SQL enrichment: documents linked to the result rows join the narrator's context
+        const enr = REGRESSION ? [] : await enrichDocuments(q.question, exec.columns, exec.rows as unknown[][], tenant, ids);
+        enrichedIds = enr.map((r) => r.id);
         const n = await narrate({
           question: q.question, metric_used: hold.g?.metric_used ?? null, sentiment: hold.g?.sentiment ?? null,
           columns: exec.columns, rows: exec.rows, row_count: exec.row_count, truncated: exec.truncated,
           sql: out.finalSql,
-          policies: ret.results.filter((r) => r.type === "policy").map((r) => ({ citation: r.policy?.citation ?? r.id, text: r.text, governs: r.policy?.governs })),
+          policies: [...docs, ...toNarratorDocs(enr)],
         }, tenant);
         headline = n.headline; narrative = n.narrative; ntin = n.usage?.input_tokens ?? 0; ntout = n.usage?.output_tokens ?? 0;
       } catch { /* narration failure must not lose the record */ }
+    } else if (refused && (hold.g?.answer_from_documents || docs.some((d) => d.doc_type !== "policy")) && docs.length > 0) { // D-048 NO_SQL path (flag, or a refusal while governed documents are in context)
+      try {
+        const n = await narrate({ question: q.question, metric_used: null, sentiment: hold.g?.sentiment ?? null, columns: [], rows: [], row_count: 0, truncated: false, policies: docs, noSql: true }, tenant);
+        noSql = true; noSqlCited = citesAny(n.narrative + " " + n.headline, docs);
+        headline = n.headline; narrative = n.narrative; ntin = n.usage?.input_tokens ?? 0; ntout = n.usage?.output_tokens ?? 0;
+      } catch { /* ignore */ }
     }
     const cost = estimateCostUsd("claude-haiku-4-5-20251001", tin + ntin, tout + ntout);
     total += cost;
     const base = {
       run_id: runId, id: q.id, tier: q.tier, question: q.question, tenant, mode: MODE, k: K,
-      retrieved_chunk_ids: ids, expanded_chunk_ids: ret.results.filter((r) => r.expanded).map((r) => r.id),
+      retrieved_chunk_ids: ids, enriched_chunk_ids: enrichedIds, no_sql: noSql, no_sql_cited: noSqlCited, expanded_chunk_ids: ret.results.filter((r) => r.expanded).map((r) => r.id),
       sql: out.finalSql, metric_used: hold.g?.metric_used ?? null, refused, sql_valid: out.ok,
       error_class: out.final_error_class, error_message: out.final_error_message, retry_count: out.retry_count,
       result_columns: exec?.columns ?? null, result_rows: exec ? exec.rows.slice(0, 100) : null, row_count: exec?.row_count ?? 0,

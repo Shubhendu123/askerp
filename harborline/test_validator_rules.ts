@@ -9,7 +9,7 @@ let fails = 0; const t = (name: string, ok: boolean, extra = "") => { if (!ok) f
 const good: [string, string][] = [];
 for (const m of (yaml.load(fs.readFileSync("data/metrics.yaml", "utf-8")) as any).metrics.filter((m: any) => m.tenant === "harborline")) good.push([`metric ${m.name}`, m.formula]);
 const gt = JSON.parse(fs.readFileSync("benchmark/ground_truth_harborline.json", "utf-8"));
-for (const [id, g] of Object.entries<any>(gt)) good.push([`ground truth ${id}`, g.sql]);
+for (const [id, g] of Object.entries<any>(gt)) if (g.sql) good.push([`ground truth ${id}`, g.sql]);
 let accepted = 0;
 for (const [name, sql] of good) { const v = validateStatic(sql, info); if (!v) accepted++; else t(`accept ${name}`, false, v.message.slice(0, 120)); }
 t(`accepts all known-good SQL (${accepted}/${good.length}: 24 metric formulas + 26 ground-truth queries)`, accepted === good.length);

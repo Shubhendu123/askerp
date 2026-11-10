@@ -6,6 +6,13 @@ domain: risk
 effective_date: 2025-01-01
 version: 1.5
 owner: Head of Network Management
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [dim_subcustodian, dim_market, pos_daily_position, rec_break, stl_trade_instruction]
 governs: "individual subcustodians / markets"
 ---

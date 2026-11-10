@@ -6,6 +6,13 @@ domain: treasury
 effective_date: 2025-01-01
 version: 2.3
 owner: Head of Treasury Operations
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [pos_cash_balance, stl_trade_instruction, dim_client.sla_tier, clt_fee_invoice]
 governs: "individual client cash accounts"
 ---

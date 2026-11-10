@@ -6,6 +6,13 @@ domain: settlement
 effective_date: 2025-01-01
 version: 4.0
 owner: Head of Settlements
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [dim_market, dim_subcustodian, stl_trade_instruction.is_matched_on_time, stl_trade_instruction.intended_settle_date_key]
 governs: "individual markets (settlement cycle, cut-offs)"
 ---

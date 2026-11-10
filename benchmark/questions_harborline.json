@@ -454,6 +454,326 @@
     "kind": "decline",
     "expectation": "decline - no HR data"
    }
+  },
+  {
+   "id": "D01",
+   "tier": "DOC",
+   "question": "Did Eastgate Capital Partners meet its settlement SLA in September 2026?",
+   "tests": "precedence: 98.5% (CA-001) over 99.0% (POL-001)",
+   "doc_only": false,
+   "precedence": [
+    "CA-001 \u00a72",
+    "POL-001 \u00a72"
+   ],
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "98\\.5",
+    "99\\.0?"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:client_sla_settlement_compliance"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_client"
+    ],
+    "policies": [
+     "harborline:POL-001#2"
+    ],
+    "documents": [
+     "harborline:CA-001#2"
+    ]
+   }
+  },
+  {
+   "id": "D02",
+   "tier": "DOC",
+   "question": "How much does Harborline owe Pinnacle for the missed rights issue?",
+   "tests": "contract cap USD 2M (CA-002 \u00a72) vs data impact; gross-negligence review (INC)",
+   "doc_only": false,
+   "precedence": [
+    "CA-002 \u00a72",
+    "POL-004 \u00a78"
+   ],
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "2(\\.0)?\\s*(M|million)|2,000,000",
+    "gross negligence|legal"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:missed_election_impact_usd"
+    ],
+    "tables": [
+     "harborline:cae_client_election"
+    ],
+    "policies": [
+     "harborline:POL-004#8"
+    ],
+    "documents": [
+     "harborline:CA-002#2",
+     "harborline:INC-EVT-2630#3"
+    ]
+   }
+  },
+  {
+   "id": "D03",
+   "tier": "DOC",
+   "question": "For Vantage's missed dividend option in Italy, what should have been applied?",
+   "tests": "standing instruction cash (CA-005) vs issuer default shares (EVT-2704)",
+   "doc_only": false,
+   "precedence": [
+    "CA-005 \u00a71",
+    "POL-004 \u00a76"
+   ],
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "cash",
+    "(standing instruction)",
+    "shares"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:missed_election_impact_usd"
+    ],
+    "tables": [
+     "harborline:cae_client_election"
+    ],
+    "policies": [],
+    "documents": [
+     "harborline:CA-005#1",
+     "harborline:EVT-2704#3"
+    ]
+   }
+  },
+  {
+   "id": "D04",
+   "tier": "DOC",
+   "question": "What was the client instruction cut-off for Italian trades in February 2026?",
+   "tests": "versioning: 17:00 CET (MG-IT v1.0), not 16:00",
+   "doc_only": true,
+   "precedence": null,
+   "version": {
+    "must": "17:00",
+    "must_not": "\\b16:00"
+   },
+   "forbid_agreement": false,
+   "facts": [
+    "17:00"
+   ],
+   "expected": {
+    "primary": [],
+    "tables": [],
+    "policies": [],
+    "documents": [
+     "harborline:MG-IT@1.0#1"
+    ]
+   }
+  },
+  {
+   "id": "D05",
+   "tier": "DOC",
+   "question": "What is the client instruction cut-off for Italian trades today?",
+   "tests": "versioning: 16:00 CET (MG-IT v2.0)",
+   "doc_only": true,
+   "precedence": null,
+   "version": {
+    "must": "16:00",
+    "must_not": "\\b17:00"
+   },
+   "forbid_agreement": false,
+   "facts": [
+    "16:00"
+   ],
+   "expected": {
+    "primary": [],
+    "tables": [],
+    "policies": [],
+    "documents": [
+     "harborline:MG-IT@2.0#1"
+    ]
+   }
+  },
+  {
+   "id": "D06",
+   "tier": "DOC",
+   "question": "If Montclair had tendered in event 2706, would all its shares have been bought?",
+   "tests": "notice-only terms: partial offer, pro-rata scaling (EVT-2706)",
+   "doc_only": true,
+   "precedence": null,
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "30\\s*%",
+    "pro.?rata|scaled"
+   ],
+   "expected": {
+    "primary": [],
+    "tables": [],
+    "policies": [],
+    "documents": [
+     "harborline:EVT-2706#3"
+    ]
+   }
+  },
+  {
+   "id": "D07",
+   "tier": "DOC",
+   "question": "Is Westmark's missed German takeover election (event 2751) still recoverable, and what do we owe?",
+   "tests": "multi-doc: additional acceptance period (EVT-2751 + MG-DE \u00a72), uncapped + interest (CA-004 \u00a72)",
+   "doc_only": false,
+   "precedence": [
+    "CA-004 \u00a72",
+    "POL-004 \u00a78"
+   ],
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "additional acceptance|acceptance period",
+    "interest",
+    "no cap|uncapped|in full"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:missed_election_impact_usd"
+    ],
+    "tables": [
+     "harborline:cae_client_election"
+    ],
+    "policies": [],
+    "documents": [
+     "harborline:CA-004#2",
+     "harborline:MG-DE@2.1#2",
+     "harborline:EVT-2751#2"
+    ]
+   }
+  },
+  {
+   "id": "D08",
+   "tier": "DOC",
+   "question": "Has Kendal Prowse Securities been through remediation, and what was the outcome?",
+   "tests": "institutional memory (INC-2026-012)",
+   "doc_only": true,
+   "precedence": null,
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "no improvement",
+    "tier D|tier-D"
+   ],
+   "expected": {
+    "primary": [],
+    "tables": [],
+    "policies": [],
+    "documents": [
+     "harborline:INC-2026-012#3"
+    ]
+   }
+  },
+  {
+   "id": "D09",
+   "tier": "DOC",
+   "question": "Why does Eastgate carry so many Harborline-borne penalties?",
+   "tests": "data share + explanation (INC-2026-007, CA-001 \u00a74)",
+   "doc_only": false,
+   "precedence": null,
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "instruction.?processing|processing error|own error"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:harborline_borne_penalties_usd"
+    ],
+    "tables": [
+     "harborline:stl_fail_penalty"
+    ],
+    "policies": [],
+    "documents": [
+     "harborline:INC-2026-007#2",
+     "harborline:CA-001#4"
+    ]
+   }
+  },
+  {
+   "id": "D10",
+   "tier": "DOC",
+   "question": "Which of Westmark's eligible reclaims breached its 90-day filing window?",
+   "tests": "contract rule in SQL (CA-004 \u00a71)",
+   "doc_only": false,
+   "precedence": [
+    "CA-004 \u00a71",
+    "POL-005 \u00a75"
+   ],
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "90"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:unfiled_reclaim_value_usd"
+    ],
+    "tables": [
+     "harborline:cae_income_payment"
+    ],
+    "policies": [
+     "harborline:POL-005#5"
+    ],
+    "documents": [
+     "harborline:CA-004#1"
+    ]
+   }
+  },
+  {
+   "id": "D11",
+   "tier": "DOC",
+   "question": "What is Redwood Asset Management's settlement rate?",
+   "tests": "leakage control: zero client_agreement chunks (Redwood has none)",
+   "doc_only": false,
+   "precedence": null,
+   "version": null,
+   "forbid_agreement": true,
+   "facts": [
+    "%"
+   ],
+   "expected": {
+    "primary": [
+     "harborline:settlement_rate_pct"
+    ],
+    "tables": [
+     "harborline:stl_trade_instruction",
+     "harborline:dim_client"
+    ],
+    "policies": [],
+    "documents": []
+   }
+  },
+  {
+   "id": "D12",
+   "tier": "DOC",
+   "question": "When do the UK and EU move to T+1?",
+   "tests": "NO_SQL: 11 October 2027 (REG-002)",
+   "doc_only": true,
+   "precedence": null,
+   "version": null,
+   "forbid_agreement": false,
+   "facts": [
+    "11 October 2027|October 11, 2027|2027-10-11"
+   ],
+   "expected": {
+    "primary": [],
+    "tables": [],
+    "policies": [],
+    "documents": [
+     "harborline:REG-002#1"
+    ]
+   }
   }
  ]
 }

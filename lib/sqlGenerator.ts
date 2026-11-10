@@ -177,10 +177,15 @@ function buildRetrievedSystem(chunks: RetrievalResult[], tenant: string): string
     : "";
   // D-045: policy chunks supply thresholds and rules; the generator may embed them in SQL but must not invent any.
   const policies = chunks.filter((c) => c.type === "policy");
+  const otherDocs = chunks.filter((c) => c.type === "document"); // D-048: regulations, client agreements, market guides, event notices, incident reports
   const policySection = policies.length > 0
     ? `RETRIEVED POLICY CONTEXT (${policies.length} policy sections):\n${policies.map((c) => `[${c.policy?.citation ?? c.id}]${c.policy?.governs ? ` (governs: ${c.policy.governs})` : ""} ${c.text}`).join("\n\n")}\n\nPOLICY RULE: thresholds, targets and criteria used in SQL must come from the policy sections above (embed them as literals). Never invent a threshold that is not in a retrieved policy section; if the question depends on a rule that is not retrieved, set "sql" to null and say which rule is missing. SCOPE RULE: a policy applies ONLY to the entity type it governs (see "governs"). Counterparty tiers (POL-007) grade counterparties; SLA targets (POL-001) are per client. Never apply a rule to a different entity type, and never grade Harborline as a whole against a per-client or per-counterparty rule.`
     : "";
-  return [tenantBase(tenant), tableSection, metricSection, policySection, tenantRules(tenant)].filter(Boolean).join("\n\n");
+  // D-048: governed documents. Authority: lower authority_rank wins a conflict (regulation 1 > client agreement 2 > policy 3 > market guide 4).
+  const docSection = otherDocs.length > 0
+    ? `RETRIEVED DOCUMENT CONTEXT (${otherDocs.length} sections beyond policies; each shows type, authority rank, access level, in-force dates):\n${otherDocs.map((c) => `[${c.policy?.citation ?? c.id}] (${c.policy?.doc_type}, authority_rank ${c.policy?.authority_rank ?? "n/a"}, ${c.policy?.access_level}, in force ${c.policy?.effective_from || "-"} to ${c.policy?.effective_to ?? "present"}) ${c.text}`).join("\n\n")}\n\nDOCUMENT RULES: (1) PRECEDENCE - when chunks of different authority address the same rule, the lower authority_rank wins: a client agreement overrides a standard policy FOR THAT CLIENT, a regulation overrides both. Use the winning chunk's threshold in SQL (embed it as a literal), and apply a client agreement only to the client it names. (2) Use only the version of a document that is in force for the question's date; superseded versions are never used for a "current" question. (3) Event notices, market guides and incident reports give facts and terms, not warehouse numbers - take amounts and counts from the data. (4) NO_SQL - ONLY when the answer is entirely a fact stated in the retrieved documents and needs NO warehouse number (a regulatory date, a cut-off time, a contract term, an incident outcome): then set "sql" to null, "answer_from_documents" to true. If the question asks how much / how many / what share / which clients or events / owed / rate / amounts for a named client or event, you MUST write SQL for the numbers (the documents supply the rule, cap, term or threshold to embed or to explain the result) - do not refuse and do not use NO_SQL for those.`
+    : "";
+  return [tenantBase(tenant), tableSection, metricSection, policySection, docSection, tenantRules(tenant)].filter(Boolean).join("\n\n");
 }
 
 const FEW_SHOT_MRO = `FEW-SHOT EXAMPLES:
@@ -224,6 +229,7 @@ export interface SQLResult {
   tables_referenced: string[];
   reasoning: string;
   confidence: string;
+  answer_from_documents?: boolean; // D-048 NO_SQL path: retrieved documents fully answer the question
   error?: string;
   usage?: { input_tokens: number; output_tokens: number };
 }

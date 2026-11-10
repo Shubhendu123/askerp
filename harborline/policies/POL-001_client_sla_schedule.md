@@ -6,6 +6,13 @@ domain: client_service
 effective_date: 2025-01-01
 version: 3.2
 owner: Head of Client Service
+doc_type: policy
+authority_rank: 3
+access_level: INTERNAL
+effective_from: 2025-01-01
+effective_to: null
+supersedes: null
+entities: {}
 binds_to: [dim_client.sla_tier, stl_trade_instruction, clt_service_request, cae_income_payment, clt_fee_invoice]
 governs: "individual clients (each client is measured against its own SLA tier; never Harborline as a whole)"
 ---

@@ -19,6 +19,7 @@
 import fs from "fs";
 import path from "path";
 import * as yaml from "js-yaml";
+import { SCOPED_TYPES, inForce, inScope, matchEntities, resolveAsOf, rowsMentionEntities, toIso, type DocEntities } from "./documents";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -61,12 +62,12 @@ interface MetricsYaml {
 interface Chunk {
   id: string;
   tenant: string;
-  type: "table" | "metric" | "policy";
+  type: "table" | "metric" | "policy" | "document";
   name: string;
   text: string;
   tables?: string[]; // metric chunks only: declared table names, schema prefix stripped (metadata; not embedded)
   policyRefs?: string[]; // metric chunks only (D-045)
-  policy?: PolicyMeta;   // policy chunks only
+  policy?: PolicyMeta;   // policy + document chunks (D-045/D-048)
 }
 
 export interface PolicyMeta {
@@ -79,11 +80,21 @@ export interface PolicyMeta {
   governs: string;       // D-048: the entity type this policy applies to (scope rule)
   domain: string;
   effective_date: string;
+  // D-048 document governance (every document type shares this metadata)
+  doc_type: string;            // policy | regulation | client_agreement | market_guide | event_notice | incident_report
+  authority_rank: number | null; // lower wins a conflict; null for records
+  access_level: string;        // INTERNAL | CONFIDENTIAL (carried and shown; not enforced - no user identity)
+  effective_from: string;
+  effective_to: string | null;
+  version: string;
+  supersedes: string | null;
+  entities: DocEntities;
+  overrides: string[];         // e.g. ["POL-004 §8"] - policy sections this document overrides for its client
 }
 
 export interface RetrievalResult {
   id: string;
-  type: "table" | "metric" | "policy";
+  type: "table" | "metric" | "policy" | "document";
   name: string;
   score: number;
   text: string;
@@ -181,34 +192,65 @@ function buildMetricText(metric: MetricDef): string {
 // "title — section heading" so short sections stay findable. Chunk id: `harborline:POL-001#3`
 // (tenant prefix per D-035; the number is the section number from the heading, else ordinal).
 
-export function loadPolicyChunks(root: string): Chunk[] {
-  const dir = path.join(root, "harborline", "policies");
-  if (!fs.existsSync(dir)) return [];
+function parseDocument(file: string, raw: string, tenantDefault: string): Chunk[] {
+  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) throw new Error(`Document ${file}: missing YAML frontmatter`);
+  const fm = yaml.load(m[1]) as Record<string, unknown>;
+  const docId = String(fm.doc_id ?? "");
+  if (!docId) throw new Error(`Document ${file}: frontmatter has no doc_id`);
+  const tenant = String(fm.tenant ?? tenantDefault);
+  const title = String(fm.title ?? docId);
+  const docType = String(fm.doc_type ?? "policy");
+  const rawVersion = (m[1].match(/^version:\s*"?([^"\n]+?)"?\s*$/m)?.[1] ?? "1.0").trim(); // raw text: yaml would turn 1.0 into 1
+  const versioned = /^MG-/.test(docId) && docType === "market_guide";
+  const idDoc = versioned ? `${docId}@${rawVersion}` : docId;
+  const cite = versioned ? `${docId} v${rawVersion}` : docId;
+  const ent = (fm.entities && typeof fm.entities === "object" ? fm.entities : {}) as DocEntities;
+  const parts = m[2].split(/^## /m).slice(1); // [0] is the H1 preamble, not a section
   const out: Chunk[] = [];
-  for (const f of fs.readdirSync(dir).filter((x) => /^POL-\d+.*\.md$/.test(x)).sort()) {
-    const raw = fs.readFileSync(path.join(dir, f), "utf-8");
-    const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-    if (!m) throw new Error(`Policy ${f}: missing YAML frontmatter`);
-    const fm = yaml.load(m[1]) as Record<string, unknown>;
-    const docId = String(fm.doc_id ?? "");
-    if (!docId) throw new Error(`Policy ${f}: frontmatter has no doc_id`);
-    const tenant = String(fm.tenant ?? "harborline");
-    const title = String(fm.title ?? docId);
-    const parts = m[2].split(/^## /m).slice(1); // [0] is the H1 preamble, not a section
-    parts.forEach((part, ordinal) => {
-      const nl = part.indexOf("\n");
-      const heading = (nl < 0 ? part : part.slice(0, nl)).trim();
-      const body = (nl < 0 ? "" : part.slice(nl + 1)).trim();
-      const no = Number(heading.match(/^(\d+)\./)?.[1] ?? ordinal + 1);
-      const meta: PolicyMeta = {
-        doc_id: docId, title, section: heading, section_no: no, citation: `${docId} §${no}`,
-        binds_to: Array.isArray(fm.binds_to) ? (fm.binds_to as unknown[]).map(String) : [],
-        governs: String(fm.governs ?? ""),
-        domain: String(fm.domain ?? ""), effective_date: String(fm.effective_date instanceof Date ? fm.effective_date.toISOString().slice(0, 10) : fm.effective_date ?? ""),
-      };
-      out.push({ id: `${tenant}:${docId}#${no}`, tenant, type: "policy", name: `${docId} §${no} ${heading.replace(/^\d+\.\s*/, "")}`,
-        text: `${title} — ${heading}\n${body}`, policy: meta });
-    });
+  let subtitle = ""; // an un-numbered "## Client: ..." heading before the first numbered section labels the document; it is context, not a section
+  parts.forEach((part, ordinal) => {
+    const nl = part.indexOf("\n");
+    const heading = (nl < 0 ? part : part.slice(0, nl)).trim();
+    const body = (nl < 0 ? "" : part.slice(nl + 1)).trim();
+    if (!/^\d+\./.test(heading) && out.length === 0 && parts.some((x) => /^\d+\./.test(x))) { subtitle = heading + (body ? " " + body : ""); return; }
+    const no = Number(heading.match(/^(\d+)\./)?.[1] ?? ordinal + 1);
+    const meta: PolicyMeta = {
+      doc_id: docId, title, section: heading, section_no: no, citation: `${cite} §${no}`,
+      binds_to: Array.isArray(fm.binds_to) ? (fm.binds_to as unknown[]).map(String) : [],
+      governs: String(fm.governs ?? ""),
+      domain: String(fm.domain ?? ""), effective_date: toIso(fm.effective_date ?? fm.effective_from),
+      doc_type: docType, authority_rank: fm.authority_rank == null ? null : Number(fm.authority_rank),
+      access_level: String(fm.access_level ?? "INTERNAL"), effective_from: toIso(fm.effective_from ?? fm.effective_date),
+      effective_to: fm.effective_to == null ? null : toIso(fm.effective_to), version: rawVersion,
+      supersedes: fm.supersedes == null ? null : String(fm.supersedes), entities: ent,
+      overrides: Array.isArray(fm.overrides) ? (fm.overrides as unknown[]).map(String) : [],
+    };
+    out.push({ id: `${tenant}:${idDoc}#${no}`, tenant, type: docType === "policy" ? "policy" : "document",
+      name: `${cite} §${no} ${heading.replace(/^\d+\.\s*/, "")}`, text: `${title}${subtitle ? ` (${subtitle.replace(/^Client:\s*/, "")})` : ""} — ${heading}\n${body}`, policy: meta });
+  });
+  return out;
+}
+
+function listMd(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? listMd(path.join(dir, e.name)) : /\.md$/.test(e.name) ? [path.join(dir, e.name)] : []).sort();
+}
+
+/** Policies (D-045) + the enterprise corpus (D-048). Templated corpus documents ({{...}}) are read from harborline/corpus_rendered/. */
+export function loadPolicyChunks(root: string): Chunk[] {
+  const out: Chunk[] = [];
+  for (const f of listMd(path.join(root, "harborline", "policies")).filter((x) => /POL-\d+/.test(path.basename(x)))) out.push(...parseDocument(f, fs.readFileSync(f, "utf-8"), "harborline"));
+  const corpus = path.join(root, "harborline", "corpus"), rendered = path.join(root, "harborline", "corpus_rendered");
+  for (const f of listMd(corpus)) {
+    let raw = fs.readFileSync(f, "utf-8");
+    if (raw.includes("{{")) {
+      const r = path.join(rendered, path.relative(corpus, f));
+      if (!fs.existsSync(r)) throw new Error(`Templated document ${path.relative(root, f)} has no rendered copy - run: python3 harborline/build_corpus.py`);
+      raw = fs.readFileSync(r, "utf-8");
+      if (raw.includes("{{")) throw new Error(`Rendered document ${path.relative(root, r)} still contains placeholders`);
+    }
+    out.push(...parseDocument(f, raw, "harborline"));
   }
   return out;
 }
@@ -242,15 +284,16 @@ interface BM25Index {
   b: number;
 }
 
-function buildBM25(corpus: string[]): BM25Index {
+/** statsN (D-048): IDF and average length are computed over the first statsN documents only, so appending the enterprise corpus to a tenant leaves every earlier chunk's BM25 score unchanged. */
+function buildBM25(corpus: string[], statsN: number = corpus.length): BM25Index {
   const k1 = 1.5;
   const b = 0.75;
   const docs = corpus.map(tokenize);
-  const N = docs.length;
+  const N = statsN;
 
   // IDF: log((N - df + 0.5) / (df + 0.5) + 1)
   const df = new Map<string, number>();
-  for (const tokens of docs) {
+  for (const tokens of docs.slice(0, N)) {
     const seen = new Set(tokens);
     Array.from(seen).forEach((t) => df.set(t, (df.get(t) ?? 0) + 1));
   }
@@ -258,7 +301,7 @@ function buildBM25(corpus: string[]): BM25Index {
   Array.from(df.entries()).forEach(([term, freq]) => {
     idf.set(term, Math.log((N - freq + 0.5) / (freq + 0.5) + 1));
   });
-  const avgdl = docs.reduce((s, d) => s + d.length, 0) / N;
+  const avgdl = docs.slice(0, N).reduce((s, d) => s + d.length, 0) / N;
   return { docs, idf, avgdl, k1, b };
 }
 
@@ -417,7 +460,7 @@ async function initCorpus(): Promise<void> {
   const embeddings: number[][] = new Array(chunks.length);
   const groups = new Map<string, number[]>();
   chunks.forEach((c, i) => {
-    const g = LEGACY_EMBED_GROUP.has(c.tenant) ? "__legacy__" : c.tenant;
+    const g = LEGACY_EMBED_GROUP.has(c.tenant) ? "__legacy__" : c.type === "document" ? `${c.tenant}:documents` : c.tenant; // D-048: corpus documents never share a call with the D-047 chunks (keeps their vectors bit-identical)
     (groups.get(g) ?? groups.set(g, []).get(g)!).push(i);
   });
   for (const [g, idxs] of Array.from(groups.entries())) {
@@ -436,7 +479,7 @@ async function initCorpus(): Promise<void> {
     tenants.set(tenant, {
       chunks: tChunks,
       embeddings: idxs.map((x) => embeddings[x.i]),
-      bm25: buildBM25(tChunks.map((c) => c.text)),
+      bm25: buildBM25(tChunks.map((c) => c.text), tChunks.filter((c) => c.type !== "document").length), // documents are appended last
     });
   }
   _tenants = tenants;
@@ -490,17 +533,37 @@ function toResult(c: Chunk, score: number, expanded?: boolean): RetrievalResult 
   return { id: c.id, type: c.type, name: c.name, score, text: c.text, ...(expanded ? { expanded: true } : {}), ...(c.policy ? { policy: c.policy } : {}) };
 }
 
-/** Pick up to k ranked chunks in rank order, skipping policy chunks beyond the cap (slots go to the next non-policy chunk). */
-function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chunk[], k: number, floor = 0): { idxs: number[]; scores: number[] } {
+/** D-048: query context for document governance. */
+interface DocCtx { question: string; asOf: string }
+const isDocChunk = (c: Chunk) => !!c.policy;
+/** Ranked retrieval may only surface documents that are in force at asOf and are not entity-scoped (those are admitted by scope, not by rank). */
+function rankEligible(c: Chunk, ctx: DocCtx | null): boolean {
+  if (!c.policy || !ctx) return true;
+  if (SCOPED_TYPES.has(c.policy.doc_type)) return false;
+  return inForce(c.policy, ctx.asOf);
+}
+
+/** Pick up to k ranked chunks in rank order, skipping policy/document chunks beyond the cap (slots go to the next non-document chunk). */
+function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chunk[], k: number, floor = 0, ctx: DocCtx | null = null): { idxs: number[]; scores: number[] } {
   const cap = maxPolicyChunks();
   const idxs: number[] = [], scores: number[] = [];
   let pol = 0;
   for (const i of order) {
     if (idxs.length >= k) break;
-    if (chunks[i].type === "policy") { if (pol >= cap || scoreOf(i) < floor) continue; pol++; }
+    if (isDocChunk(chunks[i])) { if (!rankEligible(chunks[i], ctx) || pol >= cap || scoreOf(i) < floor) continue; pol++; }
     idxs.push(i); scores.push(Math.max(0, scoreOf(i)));
   }
   return { idxs, scores };
+}
+
+/** Drop chunks that may not enter ranked retrieval from a rank list BEFORE it is truncated/fused (so they cannot occupy top-N slots). */
+/** Document-type chunks (regulation, market guides) additionally need dense cosine >= the relevance floor to enter either rank list, so a weakly related guide cannot displace a metric/table from the top-N. */
+const eligibleOrder = (order: number[], chunks: Chunk[], ctx: DocCtx | null, dense?: (i: number) => number) =>
+  (ctx ? order.filter((i) => rankEligible(chunks[i], ctx) && (chunks[i].type !== "document" || !dense || dense(i) >= policyMinScore())) : order);
+
+export function maxDocChunks(): number {
+  const n = Number(process.env.RETRIEVAL_MAX_DOC_CHUNKS ?? 5);
+  return Number.isInteger(n) && n >= 0 ? n : 5;
 }
 
 /**
@@ -513,16 +576,19 @@ function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chu
 /** D-048: policy_refs are followed only for the N highest-ranked metric chunks (results arrive in rank order). */
 const POLICY_REF_TOP_METRICS = 3;
 
-function expandPolicies(results: RetrievalResult[], index: TenantIndex, tenant: string, enabled: boolean): RetrievalResult[] {
-  const cap = maxPolicyChunks();
+function expandPolicies(results: RetrievalResult[], index: TenantIndex, tenant: string, enabled: boolean, ctx: DocCtx | null = null, scoreOf: (i: number) => number = () => 0): RetrievalResult[] {
+  const cap = maxPolicyChunks(), docCap = maxDocChunks();
   const byId = new Map(index.chunks.map((c) => [c.id, c]));
-  const cand: string[] = [];
+  const pos = new Map(index.chunks.map((c, i) => [c.id, i]));
+  const cand: string[] = [];   // policy chunks: ranked + policy_refs, by evidence rank (D-045/D-046/D-047), capped at maxPolicyChunks
+  const rankedDocs: string[] = []; // non-policy ranked documents (regulation, market guides) above the floor
   const add = (id: string) => { if (!cand.includes(id)) cand.push(id); };
   let metricsSeen = 0;
   for (const r of results) {
     if (r.expanded) continue; // table-expansion entries carry no evidence rank
     if (r.type === "policy") add(r.id);
-    else if (enabled && r.type === "metric" && ++metricsSeen <= POLICY_REF_TOP_METRICS) { // D-048: only the top-ranked metrics may pull in their policy_refs
+    else if (r.type === "document") rankedDocs.push(r.id);
+    else if (enabled && r.type === "metric" && ++metricsSeen <= POLICY_REF_TOP_METRICS) { // D-047: only the top-ranked metrics may pull in their policy_refs
       for (const ref of byId.get(r.id)?.policyRefs ?? []) {
         const targets = ref.includes("#")
           ? [byId.get(`${tenant}:${ref}`)]
@@ -531,11 +597,67 @@ function expandPolicies(results: RetrievalResult[], index: TenantIndex, tenant: 
       }
     }
   }
-  const keep = new Set(cand.slice(0, cap));
-  const out = results.filter((r) => r.type !== "policy" || keep.has(r.id));
+  // D-048 tier 1 - entity-linked documents (client agreements, incident reports, event notices): in scope only when the question names their
+  // entity; best 2 sections per document by relevance. Each section that overrides a policy section pulls that policy section in (precedence).
+  const tier1: string[] = [];
+  if (enabled && ctx) {
+    const byDoc = new Map<string, Chunk[]>();
+    // when the question names an event (event 2706 / CAE-002751), only that event's notice is linked - not every notice that shares a client or market
+    const namedEvents = new Set(index.chunks.filter((c) => c.policy?.doc_type === "event_notice" && matchEntities(ctx.question, c.policy.entities).some((h) => h.kind === "event_key")).map((c) => c.policy!.doc_id));
+    for (const c of index.chunks) {
+      if (c.tenant !== tenant || !c.policy || !SCOPED_TYPES.has(c.policy.doc_type)) continue;
+      if (c.policy.doc_type === "event_notice" && namedEvents.size > 0 && !namedEvents.has(c.policy.doc_id)) continue;
+      if (!inScope(ctx.question, c.policy.doc_type, c.policy.entities)) continue;
+      (byDoc.get(c.policy.doc_id) ?? byDoc.set(c.policy.doc_id, []).get(c.policy.doc_id)!).push(c);
+    }
+    const linked = Array.from(byDoc.values()).flatMap((cs) => cs.sort((a, b) => scoreOf(pos.get(b.id)!) - scoreOf(pos.get(a.id)!)).slice(0, 2)).sort((a, b) => scoreOf(pos.get(b.id)!) - scoreOf(pos.get(a.id)!));
+    for (const c of linked) {
+      tier1.push(c.id);
+      for (const ov of c.policy!.overrides) {
+        const mm = ov.match(/(POL-\d+)\s*§\s*(\d+)/);
+        const pc = mm && c.text.includes(ov) ? byId.get(`${tenant}:${mm[1]}#${mm[2]}`) : undefined;
+        if (pc && pc.policy && inForce(pc.policy, ctx.asOf) && !tier1.includes(pc.id)) tier1.push(pc.id);
+      }
+    }
+  }
+  // tier 1c - the in-force market guide of the market an in-scope event notice is in (linked by market), best section by relevance
+  if (enabled && ctx) {
+    const mkts = new Set(tier1.map((id) => byId.get(id)!.policy!).filter((m) => m.doc_type === "event_notice").map((m) => String((m.entities as Record<string, unknown>).market ?? "")).filter(Boolean));
+    for (const mk of Array.from(mkts)) {
+      const g = index.chunks.filter((c) => c.tenant === tenant && c.policy?.doc_type === "market_guide" && c.policy.entities && (c.policy.entities as Record<string, unknown>).market === mk && inForce(c.policy, ctx.asOf))
+        .sort((a, b) => scoreOf(pos.get(b.id)!) - scoreOf(pos.get(a.id)!))[0];
+      if (g && !tier1.includes(g.id)) tier1.push(g.id);
+    }
+  }
+  const tierSet = new Set(tier1);
+  const polKeep = cand.filter((id) => !tierSet.has(id)).slice(0, cap);
+  const order = [...tier1, ...polKeep, ...rankedDocs.filter((id) => !tierSet.has(id))];
+  const keep = new Set(Array.from(new Set(order)).slice(0, docCap));
+  const out = results.filter((r) => !(r.type === "policy" || r.type === "document") || keep.has(r.id));
   const present = new Set(out.map((r) => r.id));
-  for (const id of cand.slice(0, cap)) if (!present.has(id)) out.push(toResult(byId.get(id)!, 0, true));
+  for (const id of Array.from(keep)) if (!present.has(id)) out.push(toResult(byId.get(id)!, Math.round(Math.max(0, scoreOf(pos.get(id)!)) * 10000) / 10000, true));
   return out;
+}
+
+/**
+ * D-048 post-SQL enrichment (two-stage retrieval): after the query runs, result rows that carry an event_key, a client or a counterparty
+ * with linked documents attach those documents (best section per document by BM25 vs the question, cap 3) for the narrator.
+ * Documents already supplied to the generator are not repeated.
+ */
+export async function enrichDocuments(question: string, columns: string[], rows: unknown[][], tenant: string, alreadyIds: string[] = [], cap = 3): Promise<RetrievalResult[]> {
+  await ensureInit();
+  const index = _tenants!.get(tenant);
+  if (!index || !rows.length) return [];
+  const have = new Set(alreadyIds);
+  const raw = bm25Scores(index.bm25, question);
+  const byDoc = new Map<string, number[]>();
+  index.chunks.forEach((c, i) => {
+    if (!c.policy || !SCOPED_TYPES.has(c.policy.doc_type) || have.has(c.id)) return;
+    if (!rowsMentionEntities(columns, rows, c.policy.entities)) return;
+    (byDoc.get(c.policy.doc_id) ?? byDoc.set(c.policy.doc_id, []).get(c.policy.doc_id)!).push(i);
+  });
+  const best = Array.from(byDoc.values()).map((is) => is.sort((a, b) => raw[b] - raw[a])[0]).sort((a, b) => raw[b] - raw[a]).slice(0, cap);
+  return best.map((i) => toResult(index.chunks[i], 0, true));
 }
 
 // ── Test path (benchmark, D-036) ───────────────────────────────────────────────
@@ -572,6 +694,7 @@ export async function retrieveWithRanker(
   const index = _tenants!.get(tenant);
   if (!index) throw new Error(`Unknown tenant '${tenant}'`);
 
+  const ctx: DocCtx | null = index.chunks.some((c) => c.policy) ? { question: query, asOf: resolveAsOf(query) } : null;
   let ranked: number[];
   const rawScore = new Map<number, number>(); // bm25 normalised to [0,1] for confidence bands; dense = cosine
   if (ranker === "bm25") {
@@ -585,11 +708,11 @@ export async function retrieveWithRanker(
     ranked = dense.map((s, i) => ({ i, s })).sort((a, b) => b.s - a.s).map((x) => x.i);
     dense.forEach((v, i) => rawScore.set(i, Math.max(0, v)));
   }
-  const picked = pickRanked(ranked, (i) => rawScore.get(i) ?? 0, index.chunks, k, ranker === "bm25" ? 0 : policyMinScore()); // bm25 scores are max-normalised, not cosine: no floor
+  const picked = pickRanked(eligibleOrder(ranked, index.chunks, ctx), (i) => rawScore.get(i) ?? 0, index.chunks, k, ranker === "bm25" ? 0 : policyMinScore(), ctx); // bm25 scores are max-normalised, not cosine: no floor
   const ranked_results = picked.idxs.map((i, r) => toResult(index.chunks[i], Math.round(picked.scores[r] * 10000) / 10000));
   const exp = expansionEnabled(expand);
   return {
-    results: expandPolicies(expandTables(ranked_results, index, tenant, exp), index, tenant, exp),
+    results: expandPolicies(expandTables(ranked_results, index, tenant, exp), index, tenant, exp, ctx, (i) => rawScore.get(i) ?? 0),
     confidence: computeConfidence(picked.scores),
   };
 }
@@ -616,25 +739,26 @@ export async function retrieve(query: string, k = 5, tenant?: string, expand?: b
   // Dense retrieval
   const [queryEmb] = await voyageEmbed([query], "query");
   const denseScores = corpusEmbs.map((emb) => cosine(queryEmb, emb));
-  const denseRanks = denseScores
+  const ctx: DocCtx | null = chunks.some((c) => c.policy) ? { question: query, asOf: resolveAsOf(query) } : null; // D-048: only tenants with documents
+  const denseRanks = eligibleOrder(denseScores
     .map((s, i) => ({ i, s }))
     .sort((a, b) => b.s - a.s)
-    .map((x) => x.i);
+    .map((x) => x.i), chunks, ctx);
 
   // BM25 retrieval
   const bm25Raw = bm25Scores(bm25, query);
-  const bm25Ranks = bm25Raw
+  const bm25Ranks = eligibleOrder(bm25Raw
     .map((s, i) => ({ i, s }))
     .sort((a, b) => b.s - a.s)
-    .map((x) => x.i);
+    .map((x) => x.i), chunks, ctx, (i) => denseScores[i]);
 
   // RRF fusion — take top-10 from each for fusion, then return top-k
   const fused = rrfFuse(denseRanks.slice(0, 10), bm25Ranks.slice(0, 10));
 
   // Use dense cosine score as the reported score (no reranker)
-  const picked = pickRanked(fused, (i) => denseScores[i], chunks, k, policyMinScore()); // policy chunks capped (D-045) and floored (D-046)
+  const picked = pickRanked(fused, (i) => denseScores[i], chunks, k, policyMinScore(), ctx); // policy/document chunks capped (D-045), floored (D-046), in force and not entity-scoped (D-048)
   const confidence = computeConfidence(picked.scores);
   const results: RetrievalResult[] = picked.idxs.map((i, rank) => toResult(chunks[i], Math.round(picked.scores[rank] * 10000) / 10000));
   const exp = expansionEnabled(expand);
-  return { results: expandPolicies(expandTables(results, index, activeTenant, exp), index, activeTenant, exp), confidence };
+  return { results: expandPolicies(expandTables(results, index, activeTenant, exp), index, activeTenant, exp, ctx, (i) => denseScores[i]), confidence };
 }
