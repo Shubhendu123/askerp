@@ -583,7 +583,7 @@ No per-question A changed between Run 1 and Run 2. **The Run 2 fixes did not mea
 
 **Deployment note.** `/chat` is prerendered at build time, so the tenant strings (header, placeholder, chips) are baked from `ACTIVE_TENANT` *at build*: each Vercel project must have `ACTIVE_TENANT` set for the build, not only at runtime.
 
-## D-047 — Harborline: policy-ref audit, validator rules, scope + fidelity (and an incomplete retrieval ablation)
+## D-047 — Harborline: policy-ref audit, validator rules, scope + fidelity + Harborline retrieval-mode ablation
 
 Harborline only; MRO and Northwind are unchanged (S02/M08 retrieval ids and scores bit-identical to D-044, zero policy chunks).
 
@@ -599,7 +599,15 @@ Harborline only; MRO and Northwind are unchanged (S02/M08 retrieval ids and scor
 
 **Gate status.** MRO bit-identical PASS; `tsc` PASS; `next build` PASS; controls 4/4 PASS; P04/P05 PASS; validator tests PASS; **S02 checks 3/3 FAIL (2/3)** ⇒ not pushed.
 
-**Retrieval ablation (mode × k): INCOMPLETE - not a finding.** The Anthropic account ran out of credit mid-ablation ("Your credit balance is too low", HTTP 400). Valid data: rrf k=10 ×3, bm25 k=10 runs 1–2 (mean A all-26: rrf 2.75 [2.73–2.77] over the same two runs vs bm25 2.69 [2.69–2.69]; valid SQL 25 vs 24; cost/run $0.35 vs $0.37; bm25 pulls 2.7 policy chunks/question vs 1.9). That difference is inside noise, so no recommendation can be drawn. dense ×3, schema ×3 and bm25 run 3 produced no SQL (credit errors) and were moved to `benchmark/runs_harborline/invalid_credit_exhausted/`; the k sweep was not run. **Production mode and k stay rrf / k=10 (unchanged); MRO's D-036 finding (dense won) is neither confirmed nor contradicted for Harborline.** To finish: top up credit, then `run_harborline.ts --mode dense|schema|bm25 --k 10` (schema = entire corpus incl. all policy sections) ×3, then the k sweep (5/15) for the winner, `score_harborline.py --ablate`.
+**Retrieval ablation (mode, k=10, expansion on; all cells run on the D-047 code; 26 answerable questions, mean A with [min–max] across runs).** Cells: rrf ×3, dense ×3, bm25 ×2, schema ×2 (schema = the whole corpus, all metrics + tables + 86 policy sections, in the prompt). bm25 run 3 and schema run 3 and the k sweep were **aborted: API credits** (the Anthropic balance ran out again; aborted runs are not scored and an API failure is never counted as a wrong answer).
+| mode | n | A all-26 | simple | medium | hard | hybrid | R_recall | R_precision | policy cov | tokens in / question | cost / run |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| rrf | 3 | 2.72 [2.65–2.77] | 3.00 | 2.75 [2.62–3.00] | 2.53 [2.20–3.00] | 2.40 [2.40–2.40] | 0.98 | 0.30 | 0.89 | 9,452 | $0.35 |
+| dense | 3 | 2.72 [2.65–2.77] | 3.00 | 2.88 [2.62–3.00] | 2.40 | 2.33 [2.20–2.40] | 0.97 | 0.24 | 0.89 | 10,578 | $0.38 |
+| bm25 | 2 | 2.69 [2.69–2.69] | 3.00 | 3.00 | 2.40 | **2.00** | 0.97 | 0.23 | 0.89 | 10,484 | $0.37 |
+| schema | 2 | 2.67 [2.65–2.69] | 2.88 | 2.81 | 2.40 | 2.40 | 1.00 | 0.03 | 1.00 | 46,146 | $1.38 |
+Reading (only differences outside run-to-run range count): accuracy is a **tie** across all four modes (2.67–2.72, ranges overlap; one-question swings dominate). The one separated difference is **bm25 on hybrid questions (2.00 vs 2.40 for rrf/schema, policy coverage 0.80 vs 1.00)** - lexical-only retrieval misses policy chunks. rrf has the best retrieval precision (0.30 vs dense 0.24) and the lowest token use. schema costs ~4× per run (46K input tokens per question vs 9K) for no accuracy gain, so putting the whole corpus in the prompt is not justified on Harborline.
+**Recommendation: keep rrf, k=10 (unchanged).** Rule applied: ties → cheaper → simpler; rrf is the cheapest of the tied modes. This does **not** reproduce MRO's D-036 finding that dense won: on Harborline dense is statistically tied with rrf (and 10% costlier in tokens), and the corpus (24 metrics, 17 tables, 86 policy sections) is too small and too heavily keyworded to separate them with 26 questions. The k sweep (5/15, exploratory, 1 run each) was **not run** (aborted: API credits); k=10 stays the measured setting. Retrieval-level (model-free) metrics are deterministic, so the R_precision difference is real; accuracy differences are not resolvable at this n.
 
 ## D-048 — Enterprise document corpus (6 document types) + governed retrieval (harborline only)
 

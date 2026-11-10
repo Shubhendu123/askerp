@@ -21,6 +21,8 @@ for q in QS:
     runs = []
     for i in range(N):
         st, d = post(q); time.sleep(1)
+        if re.search(r"credit balance is too low|rate_limit_error|overloaded_error|invalid_request_error", str(d.get("detail") or "") + str(d.get("error") or ""), re.I):
+            print("ABORTED: API credits/limits - not scored"); sys.exit(3)   # an API failure is never a wrong answer
         ok = st == 200 and not d.get("error")
         fs = sh.fidelity_scope({"narrative": d.get("narrative"), "headline": d.get("headline"), "sql": d.get("sql"), "question": q}) if ok else {}
         runs.append({"status": st, "valid": ok, "error": d.get("error"), "detail": (d.get("detail") or "")[:120], "headline": d.get("headline"), "narrative": d.get("narrative"), "sql": d.get("sql"),

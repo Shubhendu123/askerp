@@ -80,3 +80,51 @@ Committed D-047 first (f492f5a, local only). Unzipped `harborline_corpus_d047.zi
 | 30-question model regression (Run 3) | NOT RUN (budget instruction) |
 DOC-tier model runs: Run 1 mean A 1.33; Run 2 (after NO_SQL/narrator-rule fix) 1.67; fact coverage 0.46 → 0.85; precedence correct 2/5; leakage 0. Details in D-048. Weak result; several answers (D03, D07, D09) still skip the SQL data.
 D-048 committed locally, NOT pushed (instruction).
+
+## Bug found in my own API-failure guard (recorded)
+My first abort regex (`credit balance|billing|rate.?limit|429|overloaded|insufficient`) false-positived on a model *refusal text* in the schema-mode/dense run 2 at C01 (the refusal mentioned a billing/limit-like word), aborting that run unscored (partial file kept as `*.ABORTED_API_CREDITS.txt`, wrongly named). It is now restricted to genuine API error shapes (`credit balance is too low`, `invalid_request_error`, `rate_limit_error`, `overloaded_error`, `^Error: 4xx/5xx`), in both runners; the stability script checks only the `error`/`detail` fields (the word "billing" legitimately appears in POL-010). dense run 2 and the remaining ablation runs were restarted.
+
+## Demo stability - LOCAL (D-047 + D-048 code, rrf/k=10, `next start` on :3101, local DuckDB file; 3 runs each)
+Verdict rule: STABLE = identical result rows in all 3 runs, no scope/fidelity flag, and consistently valid *or consistently declined*. **A consistent failure is not a good answer; I mark those "STABLE-FAIL".** Headline *text* differs in wording between runs in nearly every case (by design); "rows same" is what I compare.
+| question | rows same | valid | flags | verdict | what actually happens |
+|---|---|---|---|---|---|
+| overall settlement fail rate | yes | 3/3 | none | **STABLE** | 3.8% every time; no tier/SLA words; "across all periods in the data" - no phantom window (the requested check passes locally) |
+| total assets under custody | yes | 3/3 | tier language ×3 | **UNSTABLE (narration)** | $712.2B every time, but all 3 narrations make an unsupported fee-tier claim from POL-010 §3 and contradict each other ("highest fee tier" vs "lowest custody fee tier") - the S01 problem is NOT fixed |
+| counterparties whose fails cost most in penalties | yes | 3/3 | window:2026 ×3 (likely false positive: no window stated; heuristic matches a year-like token) | **UNSTABLE (narration)** | same rows; run 2 says $416M/$211.2M/$1.1B where the data is $416K/$211.2K - a unit error |
+| Platinum clients missed SLA target last month | yes | 3/3 | none | **STABLE** | 8 clients, 93.4%-98.3%, cites POL-001 §2 |
+| missed corporate action elections + notice window | yes (all errors) | **0/3** | none | **STABLE-FAIL** | HTTP 500 `sql_execution_failed`: the fan-out rule rejects every attempt (cae_client_election + cae_event) - the model cannot produce the CTE form. The old code returned (wrong) numbers; the new code returns an error. Needs a fix before this question is demo-safe |
+| counterparties meeting tier-D criteria | **no** | 3/3 | window ×3, SLA/client language ×1 | **UNSTABLE** | different counterparties each run (100% fail rates vs 12.5-13.3%); generated criteria differ |
+| trading desk P&L | yes | consistent decline ×3 | none | **STABLE** | declines ("custodian; no trading data") |
+| (D-048) how much do we owe Pinnacle for the missed rights issue | **no** | 2/3 | none | **UNSTABLE** | run 1 $2.0M under the CA-002 cap (correct); run 2 SQL error (nested aggregates); run 3 $507.8K (does not match the $5.0M impact / $2.0M cap) |
+
+## Live check - https://harborline-omega.vercel.app (3 runs per question)
+**The live site is still running the pre-D-047 code (nothing was pushed - the S02 3/3 gate failed and the push rule said gates must pass).** So this is a baseline of the *deployed* version, not of the fixes:
+- "What is our overall settlement fail rate?" - **FAILS the requested check on the live site, 3/3 runs**: narration says the 3.84% "places us in Tier B (1.5-4.0%) under counterparty risk tiering (POL-007 §2)", compares it to "PLATINUM client commitment of 99.0% (POL-001 §2)", and in one run adds "trailing 12-month performance standards" although the SQL has no date filter. Rows identical (3.84%) in all runs. The exact bug you described, reproduced live. Locally with D-047 the same question passes (see local table).
+- Other live results (old code): total assets - same rows but tier language ×3; penalties by counterparty - STABLE; Platinum-last-month, missed elections + notice window, tier-D counterparties - **rows differ run to run** (UNSTABLE; the old code still lets fan-out/criteria vary); trading desk P&L - consistent decline.
+- Not changed: Vercel configuration. Recommendation unchanged: rrf / k=10.
+**What is needed to put the fixes live:** push D-047 (commit f492f5a, ideally together with the fixes below). I did not, because (a) the S02 gate was 2/3 locally and (b) the local stability test shows two regressions to fix first: the missed-elections question now errors (fan-out rule never satisfied) and S01/AUC still makes the unsupported fee-tier claim.
+
+## Mode ablation - FINAL (supersedes the "INCOMPLETE" section above; all cells on the D-047 code via a git worktree at f492f5a)
+Run counts: rrf 3, dense 3, bm25 2, schema 2. **Aborted: API credits** (not scored, not counted as wrong): bm25 run 3, schema run 3 (stopped at P03), and the whole k sweep (k=5/15, 1 run each, planned as exploratory). Mean A [min-max] across runs; cost = per run:
+| mode | A all-26 | simple | medium | hard | hybrid | R_rec | R_prec | pol cov | tok in/q | cost/run |
+|---|---|---|---|---|---|---|---|---|---|---|
+| rrf | 2.72 [2.65-2.77] | 3.00 | 2.75 [2.62-3.00] | 2.53 [2.20-3.00] | 2.40 | 0.98 | 0.30 | 0.89 | 9,452 | $0.35 |
+| dense | 2.72 [2.65-2.77] | 3.00 | 2.88 [2.62-3.00] | 2.40 | 2.33 [2.20-2.40] | 0.97 | 0.24 | 0.89 | 10,578 | $0.38 |
+| bm25 | 2.69 [2.69-2.69] | 3.00 | 3.00 | 2.40 | **2.00** | 0.97 | 0.23 | 0.89 | 10,484 | $0.37 |
+| schema (whole corpus in prompt) | 2.67 [2.65-2.69] | 2.88 | 2.81 | 2.40 | 2.40 | 1.00 | 0.03 | 1.00 | 46,146 | $1.38 |
+**Recommendation: keep rrf / k=10 - no Vercel change.** Accuracy is a tie within run-to-run noise; the only separated accuracy difference is bm25 being worse on hybrid questions (2.00 vs 2.40; policy coverage 0.80). rrf is the cheapest of the tied modes (tie rule) and has the best retrieval precision. schema is ~4x the cost for no gain. This does not reproduce MRO's D-036 result (dense won): on Harborline dense = rrf within noise. k not tested (credits). Written to the D-047 ADR in DECISIONS.md.
+
+## Summary of git state
+- `f492f5a` D-047 (fixes) - local only. `20600df` D-048 (corpus + governed retrieval) - local only. A third commit holds the ablation ADR/report updates. **Nothing pushed**: the D-047 push gate failed (S02 check 2/3) and you said D-048 must not be pushed.
+- Not staged/committed (as you asked / unrelated): `AskERP_Handoff.md`, `db_rebuild/*`, `harborline/PROMPT_D045_policy_corpus_semantic_layer.md`. The corpus zip was extracted and deleted as instructed; `PROMPT_D047_enterprise_document_corpus.md` is committed inside the D-048 commit as the spec of record (revert if you do not want it tracked).
+
+## Everything that failed or is unfinished
+1. **API credit exhaustion** (twice): killed the first ablation batch (dense/schema/bm25 r3, scored nothing), and the second (schema r3, k sweep). Needs a top-up; then: `npx tsx benchmark/run_harborline.ts --mode bm25 --k 10` (r3), schema r3, and `--mode rrf --k 5|15` (D-047 commit/worktree), then re-run `--ablate`.
+2. **S02 gate 2/3** locally (run 3 narration mentioned tiers). Locally in the stability test the fail-rate question was clean 3/3 - so the narrator rule works most of the time, not always.
+3. **Live site still has the original bug** (pre-D-047 code): tier/SLA/"trailing 12-month" in all 3 live runs. Fixes not deployed.
+4. **Regression introduced by the fan-out rule**: "Which corporate action elections did we miss, and what was the notice window?" now returns a 500 (`sql_execution_failed`, fan-out rule rejects every attempt) 3/3 locally; H02 was correct only 1/3 for the same reason. The generator cannot reliably produce the pre-aggregated CTE shape. Before pushing, either add a few-shot CTE example for this pattern or relax the rule for aggregate-free child-parent joins.
+5. **Unsupported fee-tier narration for AUC (S01) persists** (3/3 local runs, contradicting each other); the `policy_refs` audit did not touch it because POL-010 §3 arrives by ranking.
+6. **Unstable answers** locally: tier-D counterparties (different rows each run), Pinnacle ($2.0M / SQL error / $507.8K), penalties by counterparty (one run with a K→M unit error).
+7. **D-048 DOC tier weak**: mean A 1.33 → 1.67 (2 iterations, 12 questions); D03/D07/D09 answered from documents without the SQL numbers; D10 SQL logically wrong; D01 does not name the standard 99.0%. Required-document coverage 0.85 in retrieval. 30-question Run 3 not executed (budget instruction).
+8. My abort-guard false positive (see above) - fixed; one dense run was repeated because of it.
+9. MRO bit-identical check: 3 of 4 checks identical, 1 showed 4th-decimal cosine drift from Voyage that did not reproduce - noted, not a code change.

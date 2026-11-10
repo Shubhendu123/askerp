@@ -65,7 +65,7 @@ async function main() {
     });
     tin += out.attempts.reduce((a, x) => a + (x.tokens_in ?? 0), 0); tout += out.attempts.reduce((a, x) => a + (x.tokens_out ?? 0), 0);
     // API failures are not answers: a credit/billing/rate-limit error aborts the run unscored (never counted as a wrong answer)
-    const apiErr = out.attempts.map((a) => a.error_message ?? "").concat(out.final_error_message ?? "").find((m) => /credit balance|billing|rate.?limit|\b429\b|overloaded|insufficient/i.test(m));
+    const apiErr = out.attempts.map((a) => a.error_message ?? "").concat(out.final_error_message ?? "").find((m) => /credit balance is too low|invalid_request_error|rate_limit_error|overloaded_error|^Error: (?:400|401|402|403|429|5\d\d)\b/i.test(m));
     if (apiErr) {
       console.log(`ABORTED: API credits/limits (${String(apiErr).slice(0, 90)}) at ${q.id} - run not scored`);
       if (fs.existsSync(file)) fs.renameSync(file, file.replace(/\.jsonl$/, ".ABORTED_API_CREDITS.txt"));
