@@ -22,7 +22,7 @@ Events are classified in `cae_event.event_type`:
 | CASH_DIVIDEND | No | None — paid automatically |
 | COUPON | No | None — paid automatically |
 | STOCK_SPLIT | No | None — positions adjusted |
-| MERGER | No | None — positions adjusted (cash or stock per terms) |
+| MERGER | Mandatory by default; voluntary where the terms offer a cash/stock election | None where mandatory — positions adjusted (cash or stock per terms); elect cash or stock where the terms offer a choice |
 | DIVIDEND_OPTION | Yes | Elect cash or stock |
 | RIGHTS_ISSUE | Yes | Elect take-up, sell rights, or lapse |
 | TENDER_OFFER | Yes | Elect tender or hold |

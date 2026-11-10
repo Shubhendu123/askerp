@@ -91,14 +91,60 @@ Output ONLY this JSON object — no markdown, no explanation:
   "confidence": "HIGH | MEDIUM | LOW"
 }`;
 
+// Harborline Global Custody tenant (D-044/D-046). Tables live in schema "harborline" (MotherDuck database "askerp" and the
+// local file). Few-shots are securities examples on purpose: D-037 found the generator hardcoded to one tenant once.
+const SYSTEM_BASE_HARBORLINE = `You are a SQL generator for a DuckDB analytics warehouse for ${getTenantConfig("harborline").llmDescriptor}. All warehouse tables live in the schema "harborline" — always qualify table names as harborline.<table>.`;
+
+const SYSTEM_RULES_HARBORLINE = `
+RULES:
+1. Return ONLY valid DuckDB SQL — no CTEs unless necessary
+2. Always qualify every table as harborline.<table_name>
+3. Use harborline.dim_date for calendar logic, joined on the *_date_key integer (YYYYMMDD) columns — never compare date keys to literals except for exact YYYYMMDD equality. The data covers 2025-05-01 to 2026-10-22 (October 2026 is incomplete and not invoiced); "last month" means the last complete month, September 2026, unless the question says otherwise
+4. Assets under custody is a point-in-time balance: sum harborline.pos_daily_position.market_value_usd on ONE date (the latest) — never across dates
+5. Settlement fail rate and settlement rate use only instructions with settlement_status IN ('SETTLED','FAILED'); a settlement is on time when actual_settle_date_key = intended_settle_date_key
+6. LIMIT results to 100 rows maximum
+7. Never use SELECT * — name columns explicitly
+8. Thresholds, targets and criteria (SLA targets, escalation limits, ageing cut-offs, tier definitions) must come from the retrieved policy context; never invent one
+9. If the question cannot be answered from the provided context and this warehouse's data (e.g. trading-desk P&L, headcount, anything outside custody operations; another tenant's data), set "sql" to null and explain why in "reasoning" — do not invent tables or columns
+
+For sentiment: use the metric's sentiment field from the SEMANTIC LAYER above.
+"positive" = higher is better, "negative" = higher is worse, "none" = directional/neutral.
+
+Output ONLY this JSON object — no markdown, no explanation:
+{
+  "sql": "SELECT ...",
+  "metric_used": "metric_name or null",
+  "sentiment": "positive | negative | none",
+  "tables_referenced": ["harborline.table1"],
+  "reasoning": "one sentence",
+  "confidence": "HIGH | MEDIUM | LOW"
+}`;
+
+const FEW_SHOT_HARBORLINE = `FEW-SHOT EXAMPLES:
+
+Q: What is the settlement fail rate by counterparty reliability tier?
+A: {"sql":"SELECT cp.reliability_tier, ROUND(100.0*COUNT(*) FILTER (WHERE i.settlement_status='FAILED')/COUNT(*),2) AS fail_rate_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp ON cp.counterparty_key=i.counterparty_key WHERE i.settlement_status IN ('SETTLED','FAILED') GROUP BY 1 ORDER BY 1","metric_used":"fail_rate_by_counterparty_tier","sentiment":"negative","tables_referenced":["harborline.stl_trade_instruction","harborline.dim_counterparty"],"reasoning":"Failed share of resolved instructions grouped by counterparty tier.","confidence":"HIGH"}
+
+Q: How much in CSDR penalties did each market incur?
+A: {"sql":"SELECT m.market_code, ROUND(SUM(p.penalty_amount_usd),2) AS penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_market m ON m.market_key=p.market_key GROUP BY 1 ORDER BY 2 DESC","metric_used":"penalty_total_usd","sentiment":"negative","tables_referenced":["harborline.stl_fail_penalty","harborline.dim_market"],"reasoning":"Sum penalty amounts per market.","confidence":"HIGH"}
+
+Q: What share of tax reclaims that we could file are actually filed, by market complexity?
+A: {"sql":"SELECT m.tax_reclaim_complexity, ROUND(100.0*COUNT(*) FILTER (WHERE ip.reclaim_filed)/COUNT(*),2) AS filed_rate_pct FROM harborline.cae_income_payment ip JOIN harborline.dim_market m ON m.market_key=ip.market_key WHERE ip.reclaim_eligible GROUP BY 1 ORDER BY 1","metric_used":"reclaim_filed_rate_pct","sentiment":"positive","tables_referenced":["harborline.cae_income_payment","harborline.dim_market"],"reasoning":"Filed share of reclaim-eligible income payments per complexity tier.","confidence":"HIGH"}
+
+Q: What are our assets under custody by client segment?
+A: {"sql":"SELECT c.client_segment, ROUND(SUM(p.market_value_usd),2) AS auc_usd FROM harborline.pos_daily_position p JOIN harborline.dim_client c ON c.client_key=p.client_key WHERE p.position_date_key=(SELECT MAX(position_date_key) FROM harborline.pos_daily_position) GROUP BY 1 ORDER BY 2 DESC","metric_used":"assets_under_custody_usd","sentiment":"positive","tables_referenced":["harborline.pos_daily_position","harborline.dim_client"],"reasoning":"Latest-date market value summed per segment.","confidence":"HIGH"}
+
+Q: What is our trading desk's P&L?
+A: {"sql":null,"metric_used":null,"sentiment":"none","tables_referenced":[],"reasoning":"Harborline is a custodian; this warehouse holds no trading or P&L data.","confidence":"HIGH"}`;
+
 function tenantBase(tenant: string): string {
-  return tenant === "mro" ? SYSTEM_BASE_MRO : SYSTEM_BASE_NORTHWIND;
+  return tenant === "mro" ? SYSTEM_BASE_MRO : tenant === "harborline" ? SYSTEM_BASE_HARBORLINE : SYSTEM_BASE_NORTHWIND;
 }
 function tenantRules(tenant: string): string {
-  return tenant === "mro" ? SYSTEM_RULES_MRO : SYSTEM_RULES_NORTHWIND;
+  return tenant === "mro" ? SYSTEM_RULES_MRO : tenant === "harborline" ? SYSTEM_RULES_HARBORLINE : SYSTEM_RULES_NORTHWIND;
 }
 function tenantFewShot(tenant: string): string {
-  return tenant === "mro" ? FEW_SHOT_MRO : FEW_SHOT_NORTHWIND;
+  return tenant === "mro" ? FEW_SHOT_MRO : tenant === "harborline" ? FEW_SHOT_HARBORLINE : FEW_SHOT_NORTHWIND;
 }
 
 // Full-schema prompt (USE_RETRIEVAL=false), filtered to one tenant's tables/metrics.
@@ -183,6 +229,7 @@ export interface SQLResult {
 /** Table names of a tenant (from schema.yaml) for the SQL validator (D-042). */
 export function getTenantSchemaInfo(tenant: string): { schema: string; tables: Set<string>; requireQualification: boolean } {
   const tables = new Set(parsedSchema.tables.filter((t) => t.tenant === tenant).map((t) => t.name));
+  if (tenant === "harborline") return { schema: "harborline", tables, requireQualification: true };
   return tenant === "mro"
     ? { schema: "mro_distributor", tables, requireQualification: true }
     : { schema: "main", tables, requireQualification: false };

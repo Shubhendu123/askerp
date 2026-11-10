@@ -475,28 +475,35 @@ function pickRanked(order: number[], scoreOf: (i: number) => number, chunks: Chu
   return { idxs, scores };
 }
 
+/**
+ * Policy selection under the cap. Candidates are ordered by the rank of the evidence that pulled them in: walking the
+ * ranked list in order, a ranked policy chunk contributes itself and a ranked metric contributes its `policy_refs`
+ * (deterministic, like table expansion). The first `cap` distinct candidates win; ranked-only policy chunks that lose are
+ * dropped, referenced ones not already ranked are appended with expanded=true. (Found in Gate B: with ranked policies
+ * filling the cap first, a metric's own referenced rule was routinely crowded out by unrelated ranked policy text.)
+ */
 function expandPolicies(results: RetrievalResult[], index: TenantIndex, tenant: string, enabled: boolean): RetrievalResult[] {
-  if (!enabled) return results;
   const cap = maxPolicyChunks();
-  const present = new Set(results.map((r) => r.id));
-  let used = results.filter((r) => r.type === "policy").length;
   const byId = new Map(index.chunks.map((c) => [c.id, c]));
-  const added: RetrievalResult[] = [];
+  const cand: string[] = [];
+  const add = (id: string) => { if (!cand.includes(id)) cand.push(id); };
   for (const r of results) {
-    if (r.type !== "metric") continue;
-    for (const ref of byId.get(r.id)?.policyRefs ?? []) {
-      const targets = ref.includes("#")
-        ? [byId.get(`${tenant}:${ref}`)]
-        : index.chunks.filter((c) => c.type === "policy" && c.policy!.doc_id === ref);
-      for (const c of targets) {
-        if (!c || c.tenant !== tenant || present.has(c.id)) continue;
-        if (used >= cap) return [...results, ...added];
-        present.add(c.id); used++;
-        added.push(toResult(c, 0, true));
+    if (r.expanded) continue; // table-expansion entries carry no evidence rank
+    if (r.type === "policy") add(r.id);
+    else if (enabled && r.type === "metric") {
+      for (const ref of byId.get(r.id)?.policyRefs ?? []) {
+        const targets = ref.includes("#")
+          ? [byId.get(`${tenant}:${ref}`)]
+          : index.chunks.filter((c) => c.type === "policy" && c.policy!.doc_id === ref);
+        for (const c of targets) if (c && c.tenant === tenant) add(c.id);
       }
     }
   }
-  return [...results, ...added];
+  const keep = new Set(cand.slice(0, cap));
+  const out = results.filter((r) => r.type !== "policy" || keep.has(r.id));
+  const present = new Set(out.map((r) => r.id));
+  for (const id of cand.slice(0, cap)) if (!present.has(id)) out.push(toResult(byId.get(id)!, 0, true));
+  return out;
 }
 
 // ── Test path (benchmark, D-036) ───────────────────────────────────────────────

@@ -32,6 +32,16 @@ export const TENANTS: Record<string, TenantConfig> = {
     metaDescription: "Conversational analytics for Summit Industrial Supply Co. — ask questions, get answers.",
     llmDescriptor: "Summit Industrial Supply Co., an industrial MRO (maintenance, repair & operations) distributor",
   },
+  harborline: {
+    id: "harborline",
+    company: "Harborline Global Custody",
+    headerPill: "Harborline Global Custody ERP",
+    searchPlaceholder: "Ask anything about Harborline — settlement, custody, corporate actions, clients…",
+    analysisLabel: "Analysis · Harborline Global Custody",
+    warehouseLabel: "Harborline Global Custody warehouse",
+    metaDescription: "Conversational analytics for Harborline Global Custody — ask questions, get answers.",
+    llmDescriptor: "Harborline Global Custody, a mid-tier global custodian (securities services) with about $700B of assets under custody",
+  },
   northwind: {
     id: "northwind",
     company: "Northwind Furniture",

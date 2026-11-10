@@ -1304,3 +1304,797 @@ tables:
   - name: ytd_balance
     type: DECIMAL
     description: Running year-to-date balance in USD.
+- name: dim_date
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per calendar day (2025-05-01 to 2026-10-22 plus settle-date run-off).
+  description: Conformed calendar. Join any *_date_key column to dim_date.date_key (YYYYMMDD).
+    Use month_num/year_num/quarter_num for periods and is_business_day for business-day logic.
+    Query as harborline.dim_date.
+  columns:
+  - name: date_key
+    type: INTEGER
+    primary_key: true
+    description: Surrogate date key in YYYYMMDD form; every *_date_key column in the fact tables
+      joins here.
+  - name: full_date
+    type: DATE
+    description: Full date.
+  - name: day_of_week
+    type: VARCHAR
+    description: Day of week.
+  - name: is_business_day
+    type: BOOLEAN
+    description: True on business days; failed-day, notice-window and penalty counting use business
+      days.
+  - name: day_of_month
+    type: INTEGER
+    description: Day of month.
+  - name: week_of_year
+    type: INTEGER
+    description: Week of year.
+  - name: month_num
+    type: INTEGER
+    description: Month num.
+  - name: month_name
+    type: VARCHAR
+    description: Month name.
+  - name: quarter_num
+    type: INTEGER
+    description: Quarter num.
+  - name: fiscal_period
+    type: VARCHAR
+    description: '''FY26-Q2'''
+  - name: year_num
+    type: INTEGER
+    description: Year num.
+  - name: is_month_end
+    type: BOOLEAN
+    description: True on the last calendar day of the month.
+- name: dim_market
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per market (12 markets).
+  description: 'Markets Harborline settles in: CSD, settlement cycle, penalty regime (CSDR /
+    CREST / NONE) and tax-reclaim complexity (LOW/MEDIUM/HIGH). Drives penalties (POL-002) and
+    reclaim leakage (POL-005). Query as harborline.dim_market.'
+  columns:
+  - name: market_key
+    type: INTEGER
+    primary_key: true
+    description: Market key.
+  - name: market_code
+    type: VARCHAR
+    description: 'Two-letter market code: US, GB, DE, FR, IT, NL, CH, JP, HK, AU, CA, SG.'
+  - name: market_name
+    type: VARCHAR
+    description: Market name.
+  - name: csd_name
+    type: VARCHAR
+    description: DTC, CREST, Clearstream, Euroclear France...
+  - name: region
+    type: VARCHAR
+    description: Americas / EMEA / APAC
+  - name: settlement_cycle
+    type: VARCHAR
+    description: T+1 / T+2
+  - name: penalty_regime
+    type: VARCHAR
+    description: 'Cash-penalty regime: CSDR (DE, FR, IT, NL), CREST (GB) or NONE (all others).
+      No penalties exist in NONE markets.'
+  - name: partial_settlement_allowed
+    type: BOOLEAN
+    description: Partial settlement allowed.
+  - name: local_currency
+    type: VARCHAR
+    description: Local currency.
+  - name: tax_reclaim_complexity
+    type: VARCHAR
+    description: 'Tax-reclaim documentation burden: LOW / MEDIUM / HIGH (FR, IT, CH are HIGH).
+      Unfiled reclaim rates are highest in HIGH markets.'
+- name: dim_security
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per security (800 securities).
+  description: 'Securities held in custody: type (EQUITY/GOVT_BOND/CORP_BOND/ETF/MMI), issuer,
+    listing market, income frequency and liquidity tier (LOW-liquidity securities fail more).
+    Query as harborline.dim_security.'
+  columns:
+  - name: security_key
+    type: INTEGER
+    primary_key: true
+    description: Security key.
+  - name: isin
+    type: VARCHAR
+    description: Isin.
+  - name: security_name
+    type: VARCHAR
+    description: Security name.
+  - name: security_type
+    type: VARCHAR
+    description: 'Instrument class: EQUITY, GOVT_BOND, CORP_BOND, ETF or MMI. Drives CSDR penalty
+      rate and fail rate (CORP_BOND fails most).'
+  - name: issuer_name
+    type: VARCHAR
+    description: Issuer name.
+  - name: issuer_country
+    type: VARCHAR
+    description: Issuer country.
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: local_currency
+    type: VARCHAR
+    description: Local currency.
+  - name: income_frequency
+    type: VARCHAR
+    description: NONE / ANNUAL / SEMI_ANNUAL / QUARTERLY
+  - name: liquidity_tier
+    type: VARCHAR
+    description: HIGH / MEDIUM / LOW; LOW-liquidity securities fail more often.
+- name: dim_client
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per institutional client (50 clients).
+  description: Harborline's custody clients with segment and SLA tier (PLATINUM/GOLD/SILVER).
+    sla_tier selects the contractual targets in POL-001; client_segment drives pricing (POL-010)
+    and reclaim eligibility (POL-005). Query as harborline.dim_client.
+  columns:
+  - name: client_key
+    type: INTEGER
+    primary_key: true
+    description: Client key.
+  - name: client_name
+    type: VARCHAR
+    description: Client name.
+  - name: client_segment
+    type: VARCHAR
+    description: ASSET_MANAGER, PENSION_FUND, INSURANCE, SOVEREIGN_WEALTH or HEDGE_FUND. Drives
+      pricing and treaty/reclaim eligibility; hedge funds are generally not reclaim-eligible.
+  - name: domicile_country
+    type: VARCHAR
+    description: Domicile country.
+  - name: sla_tier
+    type: VARCHAR
+    description: PLATINUM / GOLD / SILVER. Selects the contractual settlement-rate target and
+      response times in POL-001 section 2 (99% / 98% / 97%).
+  - name: onboarded_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the onboarded date; joins to dim_date.date_key.
+  - name: relationship_manager
+    type: VARCHAR
+    description: Relationship manager.
+  - name: base_currency
+    type: VARCHAR
+    description: Base currency.
+- name: dim_counterparty
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per trading counterparty (60).
+  description: Brokers, banks, custodians and clearing members Harborline settles against. reliability_tier
+    A (reliable) to D (chronic fails) is the planted driver of fail rates and penalties; tier
+    definitions are in POL-007. Query as harborline.dim_counterparty.
+  columns:
+  - name: counterparty_key
+    type: INTEGER
+    primary_key: true
+    description: Counterparty key.
+  - name: counterparty_name
+    type: VARCHAR
+    description: Counterparty name.
+  - name: counterparty_type
+    type: VARCHAR
+    description: BROKER_DEALER / BANK / CUSTODIAN / CLEARING_MEMBER
+  - name: region
+    type: VARCHAR
+    description: Region.
+  - name: reliability_tier
+    type: VARCHAR
+    description: A (reliable) to D (chronic fails). Fail rate by tier is about 1% / 2.5% / 7%
+      / 14%.
+  - name: is_affiliated
+    type: BOOLEAN
+    description: True for Harborline group entities; tiered on the same criteria with no exemption
+      (POL-007 section 5).
+- name: dim_subcustodian
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: 'One row per subcustodian (16): one PRIMARY per market plus BACKUP for US/GB/DE/JP.'
+  description: Local agent banks Harborline uses to hold and settle in each market. Query as
+    harborline.dim_subcustodian.
+  columns:
+  - name: subcustodian_key
+    type: INTEGER
+    primary_key: true
+    description: Subcustodian key.
+  - name: subcustodian_name
+    type: VARCHAR
+    description: Subcustodian name.
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: service_tier
+    type: VARCHAR
+    description: PRIMARY or BACKUP subcustodian for the market.
+  - name: contract_start_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the contract start date; joins to dim_date.date_key.
+- name: dim_currency
+  tenant: harborline
+  schema: harborline
+  type: dimension
+  grain: One row per currency (9).
+  description: Currencies with a simplified period-average USD rate. All fact amounts are in
+    USD already; *_local columns keep the local-currency value. Query as harborline.dim_currency.
+  columns:
+  - name: currency_key
+    type: INTEGER
+    primary_key: true
+    description: Currency key.
+  - name: currency_code
+    type: VARCHAR
+    description: USD, EUR, GBP, JPY, HKD, AUD, CAD, CHF, SGD
+  - name: currency_name
+    type: VARCHAR
+    description: Currency name.
+  - name: usd_rate
+    type: DECIMAL(12,6)
+    description: units per USD, period-average (simplified)
+- name: stl_trade_instruction
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per settlement instruction (one side of one trade); 540,000 rows.
+  description: 'Settlement instructions: intended vs actual settle date, status (SETTLED/FAILED/PENDING/CANCELLED),
+    fail reason and days_failed. The source of settlement rate, fail rate, aged fails and counterparty
+    fail analysis. FAILED rows always have days_failed >= 1; settled rows have days_failed =
+    0. Fail rate = FAILED / (SETTLED + FAILED). Query as harborline.stl_trade_instruction.'
+  columns:
+  - name: instruction_key
+    type: BIGINT
+    primary_key: true
+    description: Unique identifier for each settlement instruction.
+  - name: instruction_ref
+    type: VARCHAR
+    description: Instruction ref.
+  - name: trade_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the trade date; joins to dim_date.date_key.
+  - name: intended_settle_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Intended settlement date (ISD). Settlement-rate periods are assigned by this
+      date.
+  - name: actual_settle_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date the instruction actually settled; NULL while unsettled. Equal to intended
+      date for on-time settlements.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: counterparty_key
+    type: INTEGER
+    foreign_key: harborline.dim_counterparty.counterparty_key
+    description: Foreign key to dim_counterparty (counterparty_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: subcustodian_key
+    type: INTEGER
+    foreign_key: harborline.dim_subcustodian.subcustodian_key
+    description: Foreign key to dim_subcustodian (subcustodian_key).
+  - name: currency_key
+    type: INTEGER
+    foreign_key: harborline.dim_currency.currency_key
+    description: Foreign key to dim_currency (currency_key).
+  - name: direction
+    type: VARCHAR
+    description: RECEIVE (securities in, cash out) or DELIVER (securities out, cash in). Failed
+      receives create client overdrafts.
+  - name: quantity
+    type: BIGINT
+    description: Quantity.
+  - name: settlement_amount_local
+    type: DECIMAL(18,2)
+    description: Settlement amount local.
+  - name: settlement_amount_usd
+    type: DECIMAL(18,2)
+    description: Cash value of the instruction in USD; the basis for CSDR penalties.
+  - name: settlement_status
+    type: VARCHAR
+    description: SETTLED, FAILED, PENDING (not yet due) or CANCELLED. A FAILED instruction missed
+      its intended date (it may have settled later; actual_settle_date_key then has a value).
+  - name: fail_reason_code
+    type: VARCHAR
+    description: 'NULL when settled: LACK_OF_SECURITIES / LACK_OF_CASH / MISMATCHED_INSTRUCTION
+      / COUNTERPARTY_INSTRUCTION_MISSING / MARKET_RESTRICTION / LATE_MATCHING'
+  - name: days_failed
+    type: INTEGER
+    description: Business days settlement was late; 0 when settled on the intended date. Aged
+      fail = 5 or more (POL-006 section 3).
+  - name: is_matched_on_time
+    type: BOOLEAN
+    description: Is matched on time.
+- name: stl_fail_penalty
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per failed instruction per penalty day (CSDR/CREST penalties accrue daily);
+    ~39K rows. Only CSDR/CREST markets have rows.
+  description: Daily cash penalties on failed instructions, with the bearer (CLIENT / HARBORLINE
+    / COUNTERPARTY) that decides who pays (POL-002 section 5). Join to stl_trade_instruction
+    on instruction_key. Query as harborline.stl_fail_penalty.
+  columns:
+  - name: penalty_key
+    type: BIGINT
+    primary_key: true
+    description: Penalty key.
+  - name: instruction_key
+    type: BIGINT
+    foreign_key: harborline.stl_trade_instruction.instruction_key
+    description: The failed instruction this daily penalty accrued on.
+  - name: penalty_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the penalty date; joins to dim_date.date_key.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: counterparty_key
+    type: INTEGER
+    foreign_key: harborline.dim_counterparty.counterparty_key
+    description: Foreign key to dim_counterparty (counterparty_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: penalty_type
+    type: VARCHAR
+    description: SEFP (settlement fail) or LMFP (late matching).
+  - name: penalty_regime
+    type: VARCHAR
+    description: CSDR / CREST
+  - name: penalty_rate_bps
+    type: DECIMAL(8,4)
+    description: daily rate applied
+  - name: penalty_amount_usd
+    type: DECIMAL(14,2)
+    description: Cash penalty for this instruction-day in USD (settlement value x daily bps
+      / 10,000).
+  - name: bearer
+    type: VARCHAR
+    description: 'Who bears the penalty: CLIENT (passed through), HARBORLINE (operational loss)
+      or COUNTERPARTY (claimed back). See POL-002 section 5.'
+- name: pos_daily_position
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per client / security / market / day (1.08M rows, ~2,000 client-security pairs).
+  description: Daily holdings and market value. Assets under custody (AUC) = SUM(market_value_usd)
+    on one date; never sum across dates. quantity_pending is stuck in failed settlement. Query
+    as harborline.pos_daily_position.
+  columns:
+  - name: position_key
+    type: BIGINT
+    primary_key: true
+    description: Position key.
+  - name: position_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the position date; joins to dim_date.date_key.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: subcustodian_key
+    type: INTEGER
+    foreign_key: harborline.dim_subcustodian.subcustodian_key
+    description: Foreign key to dim_subcustodian (subcustodian_key).
+  - name: currency_key
+    type: INTEGER
+    foreign_key: harborline.dim_currency.currency_key
+    description: Foreign key to dim_currency (currency_key).
+  - name: quantity_settled
+    type: BIGINT
+    description: Quantity settled.
+  - name: quantity_pending
+    type: BIGINT
+    description: stuck in failed settlement
+  - name: market_value_local
+    type: DECIMAL(18,2)
+    description: Market value local.
+  - name: market_value_usd
+    type: DECIMAL(18,2)
+    description: Position market value in USD on that date. AUC = SUM on a single date.
+- name: pos_cash_balance
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per client / currency / business day.
+  description: Daily client cash balances. is_overdrawn rows carry overdraft_amount_usd and
+    the overnight funding_cost_usd Harborline incurs funding the shortfall (mostly caused by
+    failed receives, POL-011). Query as harborline.pos_cash_balance.
+  columns:
+  - name: cash_balance_key
+    type: BIGINT
+    primary_key: true
+    description: Cash balance key.
+  - name: balance_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the balance date; joins to dim_date.date_key.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: currency_key
+    type: INTEGER
+    foreign_key: harborline.dim_currency.currency_key
+    description: Foreign key to dim_currency (currency_key).
+  - name: opening_balance_usd
+    type: DECIMAL(18,2)
+    description: Opening balance usd.
+  - name: closing_balance_usd
+    type: DECIMAL(18,2)
+    description: Closing balance usd.
+  - name: is_overdrawn
+    type: BOOLEAN
+    description: True when the closing balance is negative; caused mostly by failed receives.
+  - name: overdraft_amount_usd
+    type: DECIMAL(18,2)
+    description: Overdraft amount usd.
+  - name: funding_cost_usd
+    type: DECIMAL(14,2)
+    description: Overnight cost Harborline incurs funding the overdraft (benchmark + 150 bps
+      / 360).
+- name: cae_event
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per corporate action event per security (~3,350 events).
+  description: Corporate action events with the announcement-to-deadline notice window. Voluntary
+    events need a client election; notice_window_days is NULL for mandatory events. Query as
+    harborline.cae_event.
+  columns:
+  - name: event_key
+    type: BIGINT
+    primary_key: true
+    description: Event key.
+  - name: event_ref
+    type: VARCHAR
+    description: Event ref.
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: event_type
+    type: VARCHAR
+    description: CASH_DIVIDEND / COUPON / STOCK_SPLIT / RIGHTS_ISSUE / TENDER_OFFER / MERGER
+      / DIVIDEND_OPTION
+  - name: is_voluntary
+    type: BOOLEAN
+    description: True when the event needs a client election.
+  - name: announcement_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the announcement date; joins to dim_date.date_key.
+  - name: record_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the record date; joins to dim_date.date_key.
+  - name: response_deadline_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the response deadline date; joins to dim_date.date_key.
+  - name: payment_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the payment date; joins to dim_date.date_key.
+  - name: notice_window_days
+    type: INTEGER
+    description: Days between announcement and response deadline (voluntary events only). 2
+      or fewer = short-notice (POL-004 section 5); the strongest predictor of missed elections.
+  - name: gross_rate_per_share
+    type: DECIMAL(14,6)
+    description: Gross rate per share.
+- name: cae_client_election
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per client per voluntary event they are entitled to (~2,670 rows).
+  description: Client elections on voluntary events. missed_deadline = true is a Harborline
+    error (POL-004 section 7) with estimated_client_impact_usd as the compensation exposure
+    (capped at USD 5M). Query as harborline.cae_client_election.
+  columns:
+  - name: election_key
+    type: BIGINT
+    primary_key: true
+    description: Election key.
+  - name: event_key
+    type: BIGINT
+    foreign_key: harborline.cae_event.event_key
+    description: Foreign key to cae_event (event_key).
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: entitled_quantity
+    type: BIGINT
+    description: Entitled quantity.
+  - name: election_status
+    type: VARCHAR
+    description: ELECTED, DEFAULTED (no instruction received - not an error) or MISSED_DEADLINE
+      (Harborline error).
+  - name: elected_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the elected date; joins to dim_date.date_key.
+  - name: deadline_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the deadline date; joins to dim_date.date_key.
+  - name: hours_before_deadline
+    type: INTEGER
+    description: negative when missed
+  - name: missed_deadline
+    type: BOOLEAN
+    description: True when Harborline failed to transmit the client's instruction before the
+      market deadline - a Harborline error.
+  - name: estimated_client_impact_usd
+    type: DECIMAL(14,2)
+    description: Compensation exposure for a missed election (0.1-1% of position value, capped
+      at USD 5M); 0 when not missed.
+- name: cae_income_payment
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per income payment per client per event.
+  description: 'Dividend/coupon income collected: timeliness (days_late), withholding tax, and
+    tax-reclaim eligibility/filing. Unfiled eligible reclaims (reclaim_eligible AND NOT reclaim_filed)
+    are the leakage. Query as harborline.cae_income_payment.'
+  columns:
+  - name: income_payment_key
+    type: BIGINT
+    primary_key: true
+    description: Income payment key.
+  - name: event_key
+    type: BIGINT
+    foreign_key: harborline.cae_event.event_key
+    description: Foreign key to cae_event (event_key).
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: currency_key
+    type: INTEGER
+    foreign_key: harborline.dim_currency.currency_key
+    description: Foreign key to dim_currency (currency_key).
+  - name: expected_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the expected date; joins to dim_date.date_key.
+  - name: actual_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the actual date; joins to dim_date.date_key.
+  - name: days_late
+    type: INTEGER
+    description: Business days between expected and actual receipt; 0 = on time.
+  - name: gross_amount_usd
+    type: DECIMAL(16,2)
+    description: Gross amount usd.
+  - name: withholding_tax_usd
+    type: DECIMAL(16,2)
+    description: Withholding tax usd.
+  - name: net_amount_usd
+    type: DECIMAL(16,2)
+    description: Net amount usd.
+  - name: statutory_rate_pct
+    type: DECIMAL(6,3)
+    description: rate actually withheld
+  - name: treaty_rate_pct
+    type: DECIMAL(6,3)
+    description: rate the client is entitled to
+  - name: reclaim_eligible
+    type: BOOLEAN
+    description: True when statutory withholding exceeds the client's treaty rate and the client
+      type qualifies.
+  - name: reclaim_filed
+    type: BOOLEAN
+    description: True when Harborline filed the tax reclaim. Eligible but unfiled = leakage.
+  - name: reclaim_amount_usd
+    type: DECIMAL(16,2)
+    description: 'Recoverable tax: gross income x (statutory - treaty rate). The value at stake
+      when unfiled.'
+  - name: reclaim_deadline_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: statute of limitations. Date key (YYYYMMDD) of the reclaim deadline date; joins
+      to dim_date.date_key.
+- name: clt_fee_invoice
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per client / month / fee type (Oct 2026 not invoiced).
+  description: Monthly fee invoices. billable_amount_usd is the standard-rate fee; invoiced_amount_usd
+    is what was charged after waiver or cap. The difference is revenue foregone, by waiver_reason
+    (POL-010 section 5). Query as harborline.clt_fee_invoice.
+  columns:
+  - name: fee_invoice_key
+    type: BIGINT
+    primary_key: true
+    description: Fee invoice key.
+  - name: invoice_ref
+    type: VARCHAR
+    description: Invoice ref.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: period_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Month-end date of the billing period.
+  - name: fee_type
+    type: VARCHAR
+    description: CUSTODY_BPS / TRANSACTION / CORPORATE_ACTION / INCOME_COLLECTION / TAX_RECLAIM
+      / OVERDRAFT
+  - name: basis_amount_usd
+    type: DECIMAL(18,2)
+    description: AUC or transaction count basis
+  - name: fee_rate
+    type: DECIMAL(10,6)
+    description: Fee rate.
+  - name: billable_amount_usd
+    type: DECIMAL(16,2)
+    description: Billable amount usd.
+  - name: invoiced_amount_usd
+    type: DECIMAL(16,2)
+    description: Amount actually charged (revenue). Revenue foregone = billable - invoiced.
+  - name: waiver_reason
+    type: VARCHAR
+    description: 'Why invoiced is below billable: SLA_CREDIT, RELATIONSHIP_DISCOUNT or FEE_CAP;
+      NULL when none.'
+- name: clt_service_request
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per client service request (~5,300 rows).
+  description: Client service requests with SLA target, breach flag and analyst_hours (cost-to-serve
+    driver, costed at USD 85/hour in POL-010 section 6). Query as harborline.clt_service_request.
+  columns:
+  - name: service_request_key
+    type: BIGINT
+    primary_key: true
+    description: Service request key.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: raised_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the raised date; joins to dim_date.date_key.
+  - name: resolved_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the resolved date; joins to dim_date.date_key.
+  - name: request_category
+    type: VARCHAR
+    description: FAIL_QUERY / INCOME_QUERY / CORPORATE_ACTION_QUERY / REPORTING / RECONCILIATION
+      / ONBOARDING
+  - name: priority
+    type: VARCHAR
+    description: P1 / P2 / P3
+  - name: resolution_hours
+    type: DECIMAL(10,2)
+    description: Resolution hours.
+  - name: sla_target_hours
+    type: INTEGER
+    description: from the client's SLA tier
+  - name: sla_breached
+    type: BOOLEAN
+    description: True when resolution_hours exceeded the tier target for the priority.
+  - name: analyst_hours
+    type: DECIMAL(8,2)
+    description: Analyst effort on the request; costed at USD 85/hour in client profitability.
+- name: rec_break
+  tenant: harborline
+  schema: harborline
+  type: fact
+  grain: One row per reconciliation break (~5,400 rows).
+  description: Reconciliation breaks between Harborline's books and subcustodian statements,
+    with age and root cause. Open breaks aged 10+ days are escalated (POL-009 section 4). Query
+    as harborline.rec_break.
+  columns:
+  - name: break_key
+    type: BIGINT
+    primary_key: true
+    description: Break key.
+  - name: break_ref
+    type: VARCHAR
+    description: Break ref.
+  - name: detected_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the detected date; joins to dim_date.date_key.
+  - name: resolved_date_key
+    type: INTEGER
+    foreign_key: harborline.dim_date.date_key
+    description: Date key (YYYYMMDD) of the resolved date; joins to dim_date.date_key.
+  - name: client_key
+    type: INTEGER
+    foreign_key: harborline.dim_client.client_key
+    description: Foreign key to dim_client (client_key).
+  - name: security_key
+    type: INTEGER
+    foreign_key: harborline.dim_security.security_key
+    description: Foreign key to dim_security (security_key).
+  - name: market_key
+    type: INTEGER
+    foreign_key: harborline.dim_market.market_key
+    description: Foreign key to dim_market (market_key).
+  - name: subcustodian_key
+    type: INTEGER
+    foreign_key: harborline.dim_subcustodian.subcustodian_key
+    description: Foreign key to dim_subcustodian (subcustodian_key).
+  - name: break_type
+    type: VARCHAR
+    description: CASH / POSITION / TRANSACTION
+  - name: break_amount_usd
+    type: DECIMAL(16,2)
+    description: Break amount usd.
+  - name: age_days
+    type: INTEGER
+    description: Business days from detection to resolution (or to today if still open). Aged
+      = 10+ (POL-009 section 4).
+  - name: break_status
+    type: VARCHAR
+    description: OPEN, RESOLVED or WRITTEN_OFF.
+  - name: root_cause
+    type: VARCHAR
+    description: FAILED_SETTLEMENT, CORPORATE_ACTION, FX, TIMING or UNKNOWN; failed settlement
+      is the most common.

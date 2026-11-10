@@ -41,6 +41,29 @@ metric_domains:
   - name: "Working Capital"
     description: "MRO tenant: cross-subject-area cash cycle metrics."
     owner: "Finance"
+  - name: "Settlement"
+    description: "Harborline tenant: settlement rate, fails, ageing and CSDR/CREST penalties."
+    owner: "Settlements"
+  - name: "Positions & Cash"
+    description: "Harborline tenant: assets under custody, overdrafts and pending settlement value."
+    owner: "Treasury Operations"
+  - name: "Corporate Actions"
+    description: "Harborline tenant: elections, notice windows and income collection."
+    owner: "Asset Servicing"
+  - name: "Tax Reclaim"
+    description: "Harborline tenant: withholding-tax reclaim filing and leakage."
+    owner: "Tax Services"
+  - name: "Client & Billing"
+    description: "Harborline tenant: fee revenue, waivers, SLA breaches and client profitability."
+    owner: "Finance"
+  - name: "Reconciliation"
+    description: "Harborline tenant: reconciliation break ageing."
+    owner: "Reconciliations"
+  - name: "Cross-area"
+    description: "Harborline tenant: metrics chaining settlement, penalties, overdrafts and SLA policy."
+    owner: "Operations"
+
+
 metrics:
 
   # ────────────────────────────────────────────────────────────────
@@ -1787,3 +1810,735 @@ metrics:
       - "What is our OTIF rate?"
       - "Which warehouse has the worst OTIF?"
       - "How does supplier reliability affect our OTIF?"
+
+  # ────────────────────────────────────────────────────────────────
+  # HARBORLINE GLOBAL CUSTODY (tenant: harborline) — D-046
+  # Formulas are runnable DuckDB SQL against harborline.* with no period filter (the generator adds
+  # periods). Data window 2025-05-01 → 2026-10-22; "last month" = the last complete month, September 2026.
+  # ────────────────────────────────────────────────────────────────
+
+  # ── Settlement ──
+
+  - name: settlement_rate_pct
+    tenant: harborline
+    domain: Settlement
+    sentiment: positive
+    grain: Share of resolved instructions settled on their intended settlement date, over the full history.
+    tables:
+      - harborline.stl_trade_instruction
+    description: |
+      Percentage of settlement instructions that settled on their intended settlement date.
+      Pending instructions (not yet due) and cancelled instructions are excluded from numerator
+      and denominator, as in the client SLA measurement (POL-001 section 2). Complement of the
+      settlement fail rate; about 96%.
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE actual_settle_date_key = intended_settle_date_key) / COUNT(*), 2)
+      FROM harborline.stl_trade_instruction
+      WHERE settlement_status IN ('SETTLED', 'FAILED')
+    dimensions_allowed:
+      - dim_client.sla_tier
+      - dim_market.market_code
+      - dim_counterparty.reliability_tier
+      - dim_security.security_type
+    synonyms: [settlement efficiency, straight-through settlement, on-time settlement rate, settled on time, settlement performance]
+    definition_owner: Settlements
+    format: percentage
+    policy_refs: [POL-001#2]
+    example_questions:
+      - "What is our overall settlement rate?"
+      - "Settlement rate by market"
+      - "How many instructions settle on the intended date?"
+
+  - name: settlement_fail_rate_pct
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: Share of resolved instructions that failed to settle on their intended date, over the full history.
+    tables:
+      - harborline.stl_trade_instruction
+    description: |
+      Percentage of settlement instructions with status FAILED (not settled on the intended
+      settlement date) out of settled and failed instructions. Pending and cancelled instructions
+      are excluded. The headline settlement-quality metric; about 3.8% overall, ranging from about
+      1% for tier A counterparties to about 14% for tier D.
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE settlement_status = 'FAILED') / COUNT(*), 2)
+      FROM harborline.stl_trade_instruction
+      WHERE settlement_status IN ('SETTLED', 'FAILED')
+    dimensions_allowed:
+      - dim_counterparty.reliability_tier
+      - dim_market.market_code
+      - dim_security.security_type
+      - dim_security.liquidity_tier
+      - dim_client.sla_tier
+      - stl_trade_instruction.fail_reason_code
+    synonyms: [fail rate, settlement fails, failed trades, fails percentage, failure rate, failed settlement rate]
+    definition_owner: Settlements
+    format: percentage
+    policy_refs: [POL-006#1]
+    example_questions:
+      - "What is our overall fail rate?"
+      - "Which market has the highest fail rate?"
+      - "Fail rate by security type"
+
+  - name: avg_days_failed
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: Average business days failed across failed instructions, over the full history.
+    tables:
+      - harborline.stl_trade_instruction
+    description: |
+      Average number of business days a failed instruction stayed unsettled past its intended
+      date. Longer fails accrue more daily penalties. Averages about 1.9 days for tier A
+      counterparties and 11 days for tier D.
+    formula: |
+      SELECT ROUND(AVG(days_failed), 2)
+      FROM harborline.stl_trade_instruction
+      WHERE settlement_status = 'FAILED'
+    dimensions_allowed:
+      - dim_counterparty.reliability_tier
+      - dim_market.market_code
+      - dim_security.security_type
+    synonyms: [average fail duration, mean days failed, how long do fails last, fail ageing average, average days late to settle]
+    definition_owner: Settlements
+    format: number
+    policy_refs: [POL-006#3]
+    example_questions:
+      - "How many days do fails last on average?"
+      - "Average days failed by counterparty tier"
+
+  - name: aged_fails_count
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: Count of failed instructions aged 5 or more business days, over the full history.
+    tables:
+      - harborline.stl_trade_instruction
+    description: |
+      Number of failed instructions with days_failed of 5 or more. The 5-day line is the aged-fail
+      threshold in the chase timeline (POL-006 section 3) and counts against each client's
+      aged-fail SLA limit (POL-001 section 2).
+    formula: |
+      SELECT COUNT(*)
+      FROM harborline.stl_trade_instruction
+      WHERE settlement_status = 'FAILED' AND days_failed >= 5
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_client.sla_tier
+      - dim_counterparty.counterparty_name
+      - dim_market.market_code
+    synonyms: [aged fails, old fails, fails over 5 days, critical fails, long outstanding fails, aged settlement fails]
+    definition_owner: Settlements
+    format: number
+    policy_refs: [POL-006#3, POL-001#2]
+    example_questions:
+      - "How many aged fails do we have?"
+      - "Which clients have the most aged fails?"
+
+  - name: fail_rate_by_counterparty_tier
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: One row per counterparty reliability tier (A-D); fail rate and average days failed, full history.
+    tables:
+      - harborline.stl_trade_instruction
+      - harborline.dim_counterparty
+    description: |
+      Settlement fail rate and average days failed for each counterparty reliability tier
+      (A reliable to D chronic). The planted gradient is about 1.0% / 2.5% / 7% / 14% fail rate,
+      the root of penalties and overdrafts. Tier definitions are in POL-007 section 2.
+    formula: |
+      SELECT cp.reliability_tier,
+             COUNT(*) AS instructions,
+             ROUND(100.0 * COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') / COUNT(*), 2) AS fail_rate_pct,
+             ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status = 'FAILED'), 2) AS avg_days_failed
+      FROM harborline.stl_trade_instruction i
+      JOIN harborline.dim_counterparty cp ON cp.counterparty_key = i.counterparty_key
+      WHERE i.settlement_status IN ('SETTLED', 'FAILED')
+      GROUP BY cp.reliability_tier
+      ORDER BY cp.reliability_tier
+    dimensions_allowed:
+      - dim_market.market_code
+      - dim_security.security_type
+    synonyms: [fail rate by tier, counterparty reliability, fails by counterparty tier, which counterparties fail most, counterparty performance, tier D fails]
+    definition_owner: Settlements
+    format: percentage
+    policy_refs: [POL-007#2]
+    example_questions:
+      - "What is the fail rate by counterparty tier?"
+      - "How much worse are tier D counterparties?"
+
+  - name: penalty_total_usd
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: Total CSDR/CREST cash penalties in USD over the full history; break down by bearer, market, counterparty or client.
+    tables:
+      - harborline.stl_fail_penalty
+    description: |
+      Total cash penalties accrued on failed instructions, across all bearers (CLIENT passed through,
+      HARBORLINE operational loss, COUNTERPARTY claimed back - POL-002 section 5). Penalties only
+      exist in CSDR (DE, FR, IT, NL) and CREST (GB) markets. Group by bearer to see who pays.
+    formula: |
+      SELECT ROUND(SUM(penalty_amount_usd), 2)
+      FROM harborline.stl_fail_penalty
+    dimensions_allowed:
+      - stl_fail_penalty.bearer
+      - dim_market.market_code
+      - dim_counterparty.reliability_tier
+      - dim_client.client_name
+      - dim_date.month_num
+    synonyms: [penalties, CSDR penalties, fail penalties, settlement penalties, total penalties, penalty cost, penalties by market]
+    definition_owner: Settlements
+    format: currency
+    policy_refs: [POL-002#5, POL-002#7]
+    example_questions:
+      - "What are total penalties?"
+      - "Penalties by market"
+      - "Which clients bear the most penalties?"
+
+  - name: harborline_borne_penalties_usd
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: Penalties borne by Harborline itself (operational loss) in USD over the full history.
+    tables:
+      - harborline.stl_fail_penalty
+    description: |
+      Penalties with bearer HARBORLINE: Harborline's own operational loss, not passed to clients or
+      counterparties. Monthly amounts above USD 100,000 trigger a mandatory operational review
+      (POL-002 section 7).
+    formula: |
+      SELECT ROUND(SUM(penalty_amount_usd), 2)
+      FROM harborline.stl_fail_penalty
+      WHERE bearer = 'HARBORLINE'
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_market.market_code
+      - dim_date.month_num
+    synonyms: [penalties we absorb, operational loss from penalties, own penalties, penalties borne by us, absorbed penalties]
+    definition_owner: Operational Risk
+    format: currency
+    policy_refs: [POL-002#5, POL-002#7]
+    example_questions:
+      - "How much in penalties does Harborline bear itself?"
+      - "Harborline-borne penalties by market"
+
+  # ── Positions & Cash ──
+
+  - name: assets_under_custody_usd
+    tenant: harborline
+    domain: Positions & Cash
+    sentiment: positive
+    grain: Total market value of all client positions on the latest position date (2026-10-22), in USD.
+    tables:
+      - harborline.pos_daily_position
+    description: |
+      Assets under custody (AUC): sum of position market value in USD on the latest date. Positions
+      are daily snapshots, so AUC must be taken on a single date - never summed across dates. About
+      $712 billion at the end of the data window across 50 clients.
+    formula: |
+      SELECT ROUND(SUM(market_value_usd), 2)
+      FROM harborline.pos_daily_position
+      WHERE position_date_key = (SELECT MAX(position_date_key) FROM harborline.pos_daily_position)
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_client.client_segment
+      - dim_client.sla_tier
+      - dim_market.market_code
+      - dim_security.security_type
+    synonyms: [AUC, assets under custody, assets under administration, AUA, total custody assets, assets held, how much do we hold]
+    definition_owner: Finance
+    format: currency
+    example_questions:
+      - "What are our assets under custody?"
+      - "AUC by client segment"
+      - "Which market holds the most assets?"
+
+  - name: overdraft_days
+    tenant: harborline
+    domain: Positions & Cash
+    sentiment: negative
+    grain: Count of client-currency-days with a negative closing balance, over the full history.
+    tables:
+      - harborline.pos_cash_balance
+    description: |
+      Number of client cash-account days that closed overdrawn (one row per client, currency and
+      business day). Overdrafts arise mostly from failed receives, so clients routing through weak
+      counterparties have far more overdraft days (POL-011 section 2).
+    formula: |
+      SELECT COUNT(*)
+      FROM harborline.pos_cash_balance
+      WHERE is_overdrawn
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_client.sla_tier
+      - dim_currency.currency_code
+      - dim_date.month_num
+    synonyms: [overdrafts, overdrawn days, days in overdraft, negative cash days, cash overdraft frequency]
+    definition_owner: Treasury Operations
+    format: number
+    policy_refs: [POL-011#2]
+    example_questions:
+      - "How many overdraft days have we had?"
+      - "Which clients are overdrawn most often?"
+
+  - name: overdraft_funding_cost_usd
+    tenant: harborline
+    domain: Positions & Cash
+    sentiment: negative
+    grain: Total overnight funding cost of client overdrafts in USD over the full history.
+    tables:
+      - harborline.pos_cash_balance
+    description: |
+      Overnight cost Harborline incurs funding client overdrafts (benchmark rate + 150 bps, annualised,
+      divided by 360 - POL-011 section 4). Waived where the overdraft is counterparty-attributable.
+    formula: |
+      SELECT ROUND(SUM(funding_cost_usd), 2)
+      FROM harborline.pos_cash_balance
+      WHERE is_overdrawn
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_currency.currency_code
+      - dim_date.month_num
+    synonyms: [overdraft cost, funding cost, cost of overdrafts, overnight funding charge, overdraft charges]
+    definition_owner: Treasury Operations
+    format: currency
+    policy_refs: [POL-011#4]
+    example_questions:
+      - "What is our overdraft funding cost?"
+      - "Funding cost by client"
+
+  - name: pending_settlement_value_usd
+    tenant: harborline
+    domain: Positions & Cash
+    sentiment: negative
+    grain: USD value of instructions not yet settled (pending or failed-and-still-open) as of the end of the data.
+    tables:
+      - harborline.stl_trade_instruction
+    description: |
+      Settlement value of instructions that have not settled: those still PENDING (not yet due) plus
+      FAILED instructions with no actual settle date. This is cash and securities currently in limbo.
+    formula: |
+      SELECT ROUND(SUM(settlement_amount_usd), 2)
+      FROM harborline.stl_trade_instruction
+      WHERE settlement_status = 'PENDING'
+         OR (settlement_status = 'FAILED' AND actual_settle_date_key IS NULL)
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_market.market_code
+      - dim_counterparty.counterparty_name
+      - stl_trade_instruction.direction
+    synonyms: [unsettled value, value in settlement limbo, outstanding settlements, pending trades value, open fails value]
+    definition_owner: Settlements
+    format: currency
+    example_questions:
+      - "What value is pending settlement?"
+      - "Open settlement exposure by counterparty"
+
+  # ── Corporate Actions & Income ──
+
+  - name: missed_election_rate_pct
+    tenant: harborline
+    domain: Corporate Actions
+    sentiment: negative
+    grain: Share of client elections on voluntary events that missed the deadline, over the full history.
+    tables:
+      - harborline.cae_client_election
+    description: |
+      Missed elections as a percentage of all client elections. A missed election is a Harborline
+      error (POL-004 section 7). Policy triggers a process review above 1.5% (POL-004 section 9);
+      the data runs at about 1.6%, driven by short-notice events.
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE missed_deadline) / COUNT(*), 2)
+      FROM harborline.cae_client_election
+    dimensions_allowed:
+      - cae_event.notice_window_days
+      - cae_event.event_type
+      - dim_market.market_code
+      - dim_client.client_name
+    synonyms: [missed elections, missed deadlines, corporate action errors, election error rate, missed corporate action deadlines]
+    definition_owner: Asset Servicing
+    format: percentage
+    policy_refs: [POL-004#9]
+    example_questions:
+      - "What is our missed election rate?"
+      - "Missed elections by notice window"
+
+  - name: missed_election_impact_usd
+    tenant: harborline
+    domain: Corporate Actions
+    sentiment: negative
+    grain: Total estimated client compensation exposure on missed elections in USD, full history.
+    tables:
+      - harborline.cae_client_election
+    description: |
+      Sum of estimated_client_impact_usd on missed elections: the value difference Harborline owes
+      clients for options not elected (0.1-1% of position value, capped at USD 5M each). Amounts
+      above USD 25,000 need Head of Asset Servicing approval, above USD 250,000 the COO (POL-004 section 8).
+    formula: |
+      SELECT ROUND(SUM(estimated_client_impact_usd), 2)
+      FROM harborline.cae_client_election
+      WHERE missed_deadline
+    dimensions_allowed:
+      - dim_client.client_name
+      - dim_market.market_code
+      - cae_event.event_type
+    synonyms: [cost of missed elections, corporate action compensation, client compensation exposure, missed election cost, election error impact]
+    definition_owner: Asset Servicing
+    format: currency
+    policy_refs: [POL-004#8]
+    example_questions:
+      - "What is the cost of our missed elections?"
+      - "Which clients have the largest missed election impact?"
+
+  - name: short_notice_event_share_pct
+    tenant: harborline
+    domain: Corporate Actions
+    sentiment: negative
+    grain: Share of voluntary corporate action events with a notice window of 2 days or fewer, full history.
+    tables:
+      - harborline.cae_event
+    description: |
+      Percentage of voluntary events announced with 2 business days or fewer to respond - the
+      short-notice class defined in POL-004 section 5. Concentrated in Italy, Hong Kong and Japan.
+      Markets above 30% are referred for subcustodian service review.
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE notice_window_days <= 2) / COUNT(*), 2)
+      FROM harborline.cae_event
+      WHERE is_voluntary
+    dimensions_allowed:
+      - dim_market.market_code
+      - cae_event.event_type
+    synonyms: [short notice events, late announcements, tight deadline events, short notice corporate actions, events with 2 days notice or less]
+    definition_owner: Asset Servicing
+    format: percentage
+    policy_refs: [POL-004#5]
+    example_questions:
+      - "What share of events are short notice?"
+      - "Which markets have the most short-notice events?"
+
+  - name: income_on_time_pct
+    tenant: harborline
+    domain: Corporate Actions
+    sentiment: positive
+    grain: Share of income payments received on the expected date, over the full history.
+    tables:
+      - harborline.cae_income_payment
+    description: |
+      Percentage of dividend and coupon payments received on the expected payment date (days_late = 0).
+      The target is 95% (POL-008 section 3); about 5% arrive late.
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE days_late = 0) / COUNT(*), 2)
+      FROM harborline.cae_income_payment
+    dimensions_allowed:
+      - dim_market.market_code
+      - dim_client.client_name
+      - dim_currency.currency_code
+    synonyms: [income timeliness, on time dividends, late income, income collection timeliness, dividends received on time]
+    definition_owner: Asset Servicing
+    format: percentage
+    policy_refs: [POL-008#3]
+    example_questions:
+      - "What percentage of income arrives on time?"
+      - "Income timeliness by market"
+
+  - name: reclaim_filed_rate_pct
+    tenant: harborline
+    domain: Tax Reclaim
+    sentiment: positive
+    grain: Share of reclaim-eligible income payments for which a reclaim was filed, over the full history.
+    tables:
+      - harborline.cae_income_payment
+    description: |
+      Of income payments eligible for a withholding-tax reclaim, the percentage Harborline actually
+      filed. About 60% overall, and far lower in HIGH-complexity markets (FR, IT, CH): the unfiled rest is
+      client value leakage (POL-005 section 4).
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE reclaim_filed) / COUNT(*), 2)
+      FROM harborline.cae_income_payment
+      WHERE reclaim_eligible
+    dimensions_allowed:
+      - dim_market.market_code
+      - dim_market.tax_reclaim_complexity
+      - dim_client.client_segment
+    synonyms: [reclaim filing rate, tax reclaim filed, reclaims filed percentage, withholding tax reclaim rate, reclaim success rate]
+    definition_owner: Tax Services
+    format: percentage
+    policy_refs: [POL-005#4]
+    example_questions:
+      - "What percentage of eligible tax reclaims do we file?"
+      - "Reclaim filing rate by market complexity"
+
+  - name: unfiled_reclaim_value_usd
+    tenant: harborline
+    domain: Tax Reclaim
+    sentiment: negative
+    grain: USD value of eligible but unfiled tax reclaims over the full history.
+    tables:
+      - harborline.cae_income_payment
+    description: |
+      Total recoverable withholding tax on income payments that were reclaim-eligible but not filed:
+      the headline leakage figure. Clients with more than USD 500,000 unfiled are escalated (POL-005
+      section 8). Statute deadlines all fall in 2028 or later in this data window.
+    formula: |
+      SELECT ROUND(SUM(reclaim_amount_usd), 2)
+      FROM harborline.cae_income_payment
+      WHERE reclaim_eligible AND NOT reclaim_filed
+    dimensions_allowed:
+      - dim_market.market_code
+      - dim_market.tax_reclaim_complexity
+      - dim_client.client_name
+      - dim_client.client_segment
+    synonyms: [tax reclaim leakage, unfiled reclaims, unclaimed withholding tax, reclaim leakage value, money left on the table, unfiled tax reclaim value]
+    definition_owner: Tax Services
+    format: currency
+    policy_refs: [POL-005#8]
+    example_questions:
+      - "How much tax reclaim value is unfiled?"
+      - "Unfiled reclaims by market"
+
+  # ── Client & Billing ──
+
+  - name: invoiced_revenue_usd
+    tenant: harborline
+    domain: Client & Billing
+    sentiment: positive
+    grain: Total invoiced fee revenue in USD over the invoiced history (May 2025 - Sep 2026).
+    tables:
+      - harborline.clt_fee_invoice
+    description: |
+      Total amount invoiced to clients across all fee types after waivers and caps. October 2026 is
+      not invoiced (month incomplete).
+    formula: |
+      SELECT ROUND(SUM(invoiced_amount_usd), 2)
+      FROM harborline.clt_fee_invoice
+    dimensions_allowed:
+      - clt_fee_invoice.fee_type
+      - dim_client.client_name
+      - dim_client.client_segment
+      - dim_client.sla_tier
+      - dim_date.month_num
+    synonyms: [revenue, fee revenue, invoiced fees, billings, total fees invoiced, custody revenue]
+    definition_owner: Finance
+    format: currency
+    policy_refs: [POL-010#2]
+    example_questions:
+      - "What is our invoiced revenue?"
+      - "Revenue by fee type"
+
+  - name: revenue_foregone_usd
+    tenant: harborline
+    domain: Client & Billing
+    sentiment: negative
+    grain: Billable minus invoiced fees in USD over the invoiced history; break down by waiver_reason.
+    tables:
+      - harborline.clt_fee_invoice
+    description: |
+      Revenue given up through waivers and caps: billable amount minus invoiced amount. Reported
+      monthly by waiver_reason - SLA_CREDIT, RELATIONSHIP_DISCOUNT or FEE_CAP (POL-010 section 5).
+    formula: |
+      SELECT ROUND(SUM(billable_amount_usd - invoiced_amount_usd), 2)
+      FROM harborline.clt_fee_invoice
+    dimensions_allowed:
+      - clt_fee_invoice.waiver_reason
+      - clt_fee_invoice.fee_type
+      - dim_client.client_name
+      - dim_date.month_num
+    synonyms: [fee waivers, revenue leakage from waivers, SLA credits cost, discounts given, foregone fees, revenue lost to waivers, waived fees]
+    definition_owner: Finance
+    format: currency
+    policy_refs: [POL-010#5]
+    example_questions:
+      - "How much revenue have we foregone?"
+      - "Revenue foregone by waiver reason"
+
+  - name: service_request_sla_breach_rate_pct
+    tenant: harborline
+    domain: Client & Billing
+    sentiment: negative
+    grain: Share of client service requests that breached their SLA target, over the full history.
+    tables:
+      - harborline.clt_service_request
+    description: |
+      Percentage of service requests where resolution time exceeded the client's tier target for the
+      request priority (POL-001 section 4).
+    formula: |
+      SELECT ROUND(100.0 * COUNT(*) FILTER (WHERE sla_breached) / COUNT(*), 2)
+      FROM harborline.clt_service_request
+    dimensions_allowed:
+      - dim_client.sla_tier
+      - dim_client.client_name
+      - clt_service_request.priority
+      - clt_service_request.request_category
+    synonyms: [SLA breaches, service level breaches, service request breaches, late service requests, SLA miss rate]
+    definition_owner: Client Service
+    format: percentage
+    policy_refs: [POL-001#4]
+    example_questions:
+      - "What is our service request SLA breach rate?"
+      - "SLA breach rate by tier"
+
+  - name: client_profitability_usd
+    tenant: harborline
+    domain: Client & Billing
+    sentiment: positive
+    grain: One row per client - cost-to-serve profitability in USD over the full invoiced history.
+    tables:
+      - harborline.dim_client
+      - harborline.clt_fee_invoice
+      - harborline.stl_fail_penalty
+      - harborline.pos_cash_balance
+      - harborline.clt_service_request
+    description: |
+      Client profitability per POL-010 section 6: invoiced revenue minus (penalties borne by Harborline
+      for the client's instructions, plus overdraft funding cost not recovered through OVERDRAFT fees,
+      plus SLA credits, plus service-request analyst hours at USD 85 per hour). Computed here over the
+      whole history per client (policy reviews it quarterly). Negative values are loss-making clients.
+    formula: |
+      WITH rev AS (SELECT client_key, SUM(invoiced_amount_usd) AS invoiced,
+                          SUM(billable_amount_usd - invoiced_amount_usd) FILTER (WHERE waiver_reason = 'SLA_CREDIT') AS sla_credits,
+                          SUM(invoiced_amount_usd) FILTER (WHERE fee_type = 'OVERDRAFT') AS overdraft_fees
+                   FROM harborline.clt_fee_invoice GROUP BY client_key),
+           pen AS (SELECT client_key, SUM(penalty_amount_usd) AS penalties
+                   FROM harborline.stl_fail_penalty WHERE bearer = 'HARBORLINE' GROUP BY client_key),
+           fund AS (SELECT client_key, SUM(funding_cost_usd) AS funding FROM harborline.pos_cash_balance GROUP BY client_key),
+           svc AS (SELECT client_key, SUM(analyst_hours) * 85 AS service_cost FROM harborline.clt_service_request GROUP BY client_key)
+      SELECT c.client_name, c.sla_tier,
+             ROUND(COALESCE(rev.invoiced, 0)
+                   - COALESCE(pen.penalties, 0)
+                   - GREATEST(COALESCE(fund.funding, 0) - COALESCE(rev.overdraft_fees, 0), 0)
+                   - COALESCE(rev.sla_credits, 0)
+                   - COALESCE(svc.service_cost, 0), 2) AS profitability_usd
+      FROM harborline.dim_client c
+      LEFT JOIN rev USING (client_key) LEFT JOIN pen USING (client_key)
+      LEFT JOIN fund USING (client_key) LEFT JOIN svc USING (client_key)
+      ORDER BY profitability_usd
+    dimensions_allowed:
+      - dim_client.client_segment
+      - dim_client.sla_tier
+    synonyms: [client profitability, cost to serve, unprofitable clients, loss-making clients, client margin, negative profitability clients, which clients lose money]
+    definition_owner: Product and Pricing
+    format: currency
+    policy_refs: [POL-010#6]
+    example_questions:
+      - "Which clients are unprofitable under our cost-to-serve definition?"
+      - "Client profitability ranking"
+
+  # ── Reconciliation ──
+
+  - name: open_breaks_aged_value_usd
+    tenant: harborline
+    domain: Reconciliation
+    sentiment: negative
+    grain: USD value of open reconciliation breaks aged 10 or more business days, as of the end of the data.
+    tables:
+      - harborline.rec_break
+    description: |
+      Sum of break amounts for breaks still OPEN with age of 10 days or more: the Aged and Critical
+      classes in POL-009 section 4, escalated to the Head of Reconciliations and reported weekly.
+    formula: |
+      SELECT ROUND(SUM(break_amount_usd), 2)
+      FROM harborline.rec_break
+      WHERE break_status = 'OPEN' AND age_days >= 10
+    dimensions_allowed:
+      - rec_break.break_type
+      - rec_break.root_cause
+      - dim_client.client_name
+      - dim_market.market_code
+    synonyms: [aged breaks, old reconciliation breaks, unresolved breaks, aged reconciliation exceptions, open breaks over 10 days]
+    definition_owner: Reconciliations
+    format: currency
+    policy_refs: [POL-009#4]
+    example_questions:
+      - "What is the value of aged open breaks?"
+      - "Aged open breaks by root cause"
+
+  # ── Cross-area ──
+
+  - name: counterparty_fail_cash_impact
+    tenant: harborline
+    domain: Cross-area
+    sentiment: negative
+    grain: One row per counterparty and client - penalties plus allocated overdraft funding cost from failed receives, USD.
+    tables:
+      - harborline.stl_trade_instruction
+      - harborline.stl_fail_penalty
+      - harborline.pos_cash_balance
+      - harborline.dim_counterparty
+      - harborline.dim_client
+    description: |
+      Cash cost of counterparty fails, chaining fails to penalties to overdraft funding cost. Penalties
+      are summed directly per counterparty and client. A client's overdraft funding cost is allocated across
+      its counterparties in proportion to the USD value of that counterparty's FAILED RECEIVE instructions
+      for the client (failed receives are the main overdraft cause, POL-011 section 2). An allocation, not an
+      observed link: the data has no instruction-to-overdraft key.
+    formula: |
+      WITH fr AS (SELECT client_key, counterparty_key, SUM(settlement_amount_usd) AS v
+                  FROM harborline.stl_trade_instruction
+                  WHERE direction = 'RECEIVE' AND settlement_status = 'FAILED' GROUP BY client_key, counterparty_key),
+           frt AS (SELECT client_key, SUM(v) AS tv FROM fr GROUP BY client_key),
+           fund AS (SELECT client_key, SUM(funding_cost_usd) AS funding FROM harborline.pos_cash_balance GROUP BY client_key),
+           pen AS (SELECT client_key, counterparty_key, SUM(penalty_amount_usd) AS penalties
+                   FROM harborline.stl_fail_penalty GROUP BY client_key, counterparty_key),
+           alloc AS (SELECT fr.client_key, fr.counterparty_key, fund.funding * fr.v / frt.tv AS funding_alloc
+                     FROM fr JOIN frt USING (client_key) JOIN fund USING (client_key))
+      SELECT cp.counterparty_name, cp.reliability_tier, c.client_name,
+             ROUND(COALESCE(pen.penalties, 0), 2) AS penalties_usd,
+             ROUND(COALESCE(alloc.funding_alloc, 0), 2) AS allocated_funding_cost_usd,
+             ROUND(COALESCE(pen.penalties, 0) + COALESCE(alloc.funding_alloc, 0), 2) AS total_cash_impact_usd
+      FROM pen
+      FULL OUTER JOIN alloc USING (client_key, counterparty_key)
+      JOIN harborline.dim_counterparty cp USING (counterparty_key)
+      JOIN harborline.dim_client c USING (client_key)
+      ORDER BY total_cash_impact_usd DESC
+    dimensions_allowed:
+      - dim_counterparty.reliability_tier
+      - dim_client.sla_tier
+    synonyms: [cost of counterparty fails, counterparty fail cost, which counterparties cost us most, fails to penalties to overdrafts, counterparty cash impact, fail-driven overdraft cost]
+    definition_owner: Operational Risk
+    format: currency
+    policy_refs: [POL-007#3, POL-011#2]
+    example_questions:
+      - "Which counterparties cost us the most in penalties and overdraft funding?"
+      - "What do tier D counterparties cost each client?"
+
+  - name: client_sla_settlement_compliance
+    tenant: harborline
+    domain: Cross-area
+    sentiment: positive
+    grain: One row per client per calendar month - settlement rate vs the client's SLA tier target (POL-001 section 2).
+    tables:
+      - harborline.stl_trade_instruction
+      - harborline.dim_client
+      - harborline.dim_date
+    description: |
+      Monthly settlement rate per client against the contractual target for its SLA tier: PLATINUM 99.0%,
+      GOLD 98.0%, SILVER 97.0% (POL-001 section 2). Settlement rate = instructions settled on the intended
+      date / (SETTLED + FAILED instructions) in the month of the intended date. met_target is false for a
+      breach. The flagship hybrid metric: combines data with a policy threshold.
+    formula: |
+      SELECT c.client_name, c.sla_tier, d.year_num, d.month_num,
+             COUNT(*) AS instructions,
+             ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct,
+             CASE c.sla_tier WHEN 'PLATINUM' THEN 99.0 WHEN 'GOLD' THEN 98.0 ELSE 97.0 END AS target_pct,
+             100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*)
+               >= CASE c.sla_tier WHEN 'PLATINUM' THEN 99.0 WHEN 'GOLD' THEN 98.0 ELSE 97.0 END AS met_target
+      FROM harborline.stl_trade_instruction i
+      JOIN harborline.dim_client c ON c.client_key = i.client_key
+      JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key
+      WHERE i.settlement_status IN ('SETTLED', 'FAILED')
+      GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num
+      ORDER BY d.year_num, d.month_num, c.client_name
+    dimensions_allowed:
+      - dim_client.sla_tier
+      - dim_date.year_num
+      - dim_date.month_num
+    synonyms: [SLA compliance, settlement SLA, clients missing settlement target, SLA settlement target, which clients breached settlement SLA, tier target settlement rate, platinum clients missing target]
+    definition_owner: Client Service
+    format: percentage
+    policy_refs: [POL-001#2, POL-001#4]
+    example_questions:
+      - "Which PLATINUM clients missed their settlement SLA target last month?"
+      - "Which clients met their settlement target in September 2026?"

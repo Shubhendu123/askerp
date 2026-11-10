@@ -492,7 +492,7 @@ No regression on S02/M08.
 
 ## D-045 — Policy documents as a third retrieval chunk type
 
-**Status:** Part A implemented · 2026-11-11 · **`policy_refs` expansion and the policy-chunk cap are implemented but NOT yet verified — verification is Gate B (needs metrics carrying `policy_refs`).** Only chunking, chunk IDs, uniqueness and type-checking are verified so far.
+**Status:** Accepted · 2026-11-11 · `policy_refs` expansion and the policy cap verified at Gate B (real retriever, Voyage + BM25 + RRF) after one design fix, below. Part C benchmark results are in D-046.
 
 **What.** `harborline/policies/POL-001..012.md` (YAML frontmatter + `## ` sections) become retrieval chunks of type `policy`, harborline tenant only (frontmatter `tenant`). One chunk per `## ` section (not per document: too coarse to rank; not per paragraph: loses rule context). Embedded text is `title — section heading` + body. Chunk ID `harborline:POL-001#3` (D-035 tenant prefix; `#n` is the section number from the heading). Duplicate-ID assertion retained. 86 chunks / 12 documents / 0 duplicate IDs.
 
@@ -500,8 +500,29 @@ No regression on S02/M08.
 
 **Anti-crowding cap.** Policy chunks also rank directly, so a policy-heavy question could crowd out metrics/tables — the failure D-041 diagnosed. Ranked + expanded policy chunks combined are capped at `RETRIEVAL_MAX_POLICY_CHUNKS` (default 3). Policy chunks beyond the cap are skipped in ranking, so their slots go to the next non-policy chunk.
 
+**Verification finding (Gate B) and fix.** The first implementation appended `policy_refs` only into whatever cap budget the *ranked* policy chunks had left. In practice ranked policy text filled the 3 slots first, so a metric's own referenced rule was routinely dropped (for "How many aged fails do we have?", `aged_fails_count` references POL-001#2 but unrelated ranked POL-009#4 took the slot). Fixed: policy candidates are ordered by the rank of the evidence that pulled them in (a ranked policy chunk contributes itself; a ranked metric contributes its `policy_refs`), the first `cap` distinct candidates win, losing ranked-only policy chunks are dropped, referenced ones not already ranked are appended with `expanded: true`. The cap still bounds ranked + expanded combined. Verified: aged fails → POL-001#2 appended by expansion; `counterparty_fail_cash_impact` → POL-007#3/POL-011#2 appended; a "policies about fails, penalties, SLA tiers, counterparty tiers, overdrafts and reclaim" question matched 8 policy sections uncapped and 3 capped, keeping 12 non-policy chunks vs 9; cap=1 also holds with expansion.
+
 **Use.** SQL generator: policy chunks supply thresholds/rules, which it may embed as literals; it must not invent a threshold absent from a retrieved policy (and returns null SQL naming the missing rule). Narrator: cites `(POL-001 §2)` inline only for policies actually retrieved. Retrieval panel: distinct `POLICY` badge; policy chunks always listed even beyond the top 5.
 
 **Deployment.** Policies are discovered via `fs.readdirSync`, invisible to Next's static file tracing → `experimental.outputFileTracingIncludes` for `/api/ask` in `next.config.mjs` (otherwise production silently has zero policy chunks).
 
 **Also changed.** Corpus embedding is batched (64/call); Voyage caps a call at 128 inputs and the corpus is growing past that.
+
+## D-046 — Harborline semantic layer (schema.yaml + metrics.yaml) and tenant wiring
+
+**Status:** Part B accepted · 2026-11-11 · Part C verification results are appended below once run.
+
+**Schema.** 17 `tenant: harborline` entries (179 columns) appended to `data/schema.yaml`, generated from `harborline/ddl/harborline.sql` by `harborline/gen/build_schema_yaml.py` so types/PK/FK/value lists cannot drift from the real DDL; table purpose/grain and column business meaning are authored in the script. Append-only: the 29 existing entries are byte-identical.
+
+**Metrics.** 24 `tenant: harborline` metrics (settlement 7, positions & cash 4, corporate actions & income 6, billing 4, reconciliation 1, cross-area 2), each with runnable DuckDB `formula` against `harborline.*`, schema-qualified `tables`, `grain`, synonyms/examples and `policy_refs` where a policy rule is embedded (e.g. `aged_fails_count` → POL-006#3, POL-001#2; `client_sla_settlement_compliance` → POL-001#2/#4 with the 99/98/97% tier targets as literals). Gate B (`harborline/verify_semantic_layer.py`): all 24 formulas execute; declaration audit (tables used in formula == `tables:`) passes for all 24; sanity checks against D-044 pass (AUC $712.2B, fail rate 3.84%, tier gradient 1.02/2.45/7.03/13.95%, reclaim filed 59.9%, missed elections 1.65%, penalties $1.43M, missed impact $79.36M).
+
+**Definitions chosen.** Fail/settlement rate use only SETTLED+FAILED instructions (pending/cancelled excluded, matching POL-001 §2). AUC is a single-date balance (latest date). "Last month" = September 2026, the last complete month (October 2026 is incomplete and not invoiced). `client_profitability_usd` follows POL-010 §6 literally over the whole invoiced history (policy reviews quarterly): invoiced − Harborline-borne penalties − unrecovered overdraft funding (funding − OVERDRAFT fees, floored at 0) − SLA credits − analyst hours × USD 85. `counterparty_fail_cash_impact` *allocates* each client's overdraft funding cost across its counterparties by failed-RECEIVE value because the data has no instruction→overdraft key; the metric description says so.
+
+**Tenant wiring (B3).** `lib/tenants.ts` gains `harborline`; `lib/sqlGenerator.ts` gains Harborline base/rules/few-shot (securities examples incl. a trading-P&L refusal — D-037 lesson) and `getTenantSchemaInfo` returns schema `harborline` with qualification required. No MRO/Northwind corpus entry, warehouse or validator logic changed.
+
+**Observations and follow-ups.**
+- **Service-request SLA breach rate is 32%** — high versus typical custody operations. A candidate for recalibration of the generator (D-044 style additive patch); left as is so the data matches what was verified.
+- **MERGER voluntariness.** The data has 95 voluntary MERGER events while POL-004 §2 said mergers were non-voluntary. Resolved by amending the policy (not the data): MERGER is "mandatory by default; voluntary where the terms offer a cash/stock election". Policy chunk count unchanged (86).
+- AUC is $712.2B and the fail rate 3.84% versus the ≈$714B / ≈3.75% in the D-045 brief; both match D-044's own verified numbers, so the brief's figures were approximations.
+- Income on time is 94.99% — a hair under the POL-008 95% target; reclaim deadlines are all 2028+ (D-044).
+- Gate B retrieval verification and the policy-priority fix are recorded in D-045.
