@@ -423,7 +423,7 @@ export default function ChangeTab({ response, loading }: Props) {
               name: string;
               score: number;
               text: string;
-            }>).filter((r, i, all) => i < 5 || r.type === "policy").map((r) => ( // D-045: policy chunks always shown, beyond the top 5
+            }>).filter((r, i) => i < 5 || r.type === "policy").map((r) => ( // D-045: policy chunks always shown, beyond the top 5
               <div
                 key={r.id}
                 className="flex items-start gap-3 p-2"
