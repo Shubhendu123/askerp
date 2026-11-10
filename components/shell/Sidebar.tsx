@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Bookmark,
   Database,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, soon: true },
   { label: "Saved", href: "/saved", icon: Bookmark, soon: true },
   { label: "Data", href: "/data", icon: Database, soon: true },
+  { label: "Traces", href: "/traces", icon: Activity }, // D-043 observability
 ];
 
 export default function Sidebar() {
