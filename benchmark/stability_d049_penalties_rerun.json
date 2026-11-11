@@ -1,0 +1,1007 @@
+[
+ {
+  "question": "Which counterparties' settlement fails cost us the most in penalties?",
+  "same_rows": true,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Hawick Dunn Securities and Kendal Prowse Securities alone account for $416.0K of the $1.4M",
+    "narrative": "Hawick Dunn Securities and Kendal Prowse Securities alone account for $416.0K of the $1.4M total penalty exposure across all 60 counterparties. All five highest-penalty counterparties hold tier D reliability ratings, suggesting settlement discipline correlates sharply with cost; the concentration in the bottom reliability tier signals that tightening counterparty risk controls or enforcement could materially reduce penalty leakage.",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS total_penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_name, cp.reliability_tier ORDER BY total_penalties_usd DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "window: july 2026"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Top 5 counterparties drove $691.7M in settlement failure penalties"
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Hawick Dunn Securities and Kendal Prowse Securities\u2014both D-tier counterparties\u2014account for",
+    "narrative": "Hawick Dunn Securities and Kendal Prowse Securities\u2014both D-tier counterparties\u2014account for $416.0K of the $1.4M total penalty cost across all 60 counterparties. The top five counterparties, all rated D or C, represent $691.7K in penalties; notably, four of the five top offenders carry the lowest reliability tier, signaling concentration of settlement risk among weaker counterparties. Reviewing controls and escalation triggers for D-tier counterparties should be prioritized to reduce future exposure.",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_name, cp.reliability_tier ORDER BY penalties_usd DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "window: july 2026",
+      "SLA/client-tier language but SQL is not per client"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Top 5 counterparties drive $691.7M in settlement penalties"
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Hawick Dunn Securities and Kendal Prowse Securities alone drove $416.0K in costs across al",
+    "narrative": "Hawick Dunn Securities and Kendal Prowse Securities alone drove $416.0K in costs across all periods in the data, both rated tier D for reliability. The top five offenders\u2014all D-tier or C-tier counterparties\u2014represent 49.4% of the $1.4M total penalty burden, signaling concentration of settlement risk among lower-reliability partners and a need to tighten execution standards or reduce exposure to repeat fail-generators.",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS total_penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_key, cp.counterparty_name, cp.reliability_tier ORDER BY total_penalties_usd DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "window: july 2026"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Five counterparties account for $691.7M in settlement penalties"
+     ]
+    }
+   }
+  ],
+  "same_rows_as_set": true
+ }
+]

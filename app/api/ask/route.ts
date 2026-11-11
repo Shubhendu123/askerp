@@ -1,3 +1,4 @@
+import { moneyContext } from "@/lib/moneyFormat";
 import { SCOPE_CHECK_TENANTS, checkScope, dropFlaggedSentences } from "@/lib/scopeCheck";
 import { NextRequest, NextResponse } from "next/server";
 import { generateSQL, getTenantSchemaInfo, USE_RETRIEVAL, DEFAULT_TENANT } from "@/lib/sqlGenerator";
@@ -205,19 +206,21 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
     let tin = n.usage?.input_tokens ?? 0, tout = n.usage?.output_tokens ?? 0;
     // D-049 scope check (harborline only): narrate -> check -> regenerate ONCE without policy chunks -> check -> drop the flagged sentences
     if (SCOPE_CHECK_TENANTS.has(DEFAULT_TENANT)) {
-      const first = checkScope(`${headline} ${narrative}`, finalSql);
+      const allowedMoney = moneyContext(execResult.columns, execResult.rows as unknown[][]).allowed;
+      const first = checkScope(`${headline} ${narrative}`, finalSql, allowedMoney);
       if (!first.ok) {
-        scopeInfo = { first_violations: [...(first.windowBad ? ["window: " + first.windowClaims.join(", ")] : []), ...first.scopeViol], regenerated: true, dropped: [] };
+        scopeInfo = { first_violations: [...(first.windowBad ? ["window: " + first.windowClaims.join(", ")] : []), ...first.scopeViol, ...(first.moneyBad.length ? ["money: " + first.moneyBad.join(", ")] : [])], regenerated: true, dropped: [] };
         try {
           const n2 = await narrate({
             question, metric_used: sqlResult.metric_used ?? null, sentiment: sqlResult.sentiment ?? null, columns: execResult.columns, rows: execResult.rows,
-            row_count: execResult.row_count, truncated: execResult.truncated, sql: finalSql, policies: [], // no policy chunks
+            row_count: execResult.row_count, truncated: execResult.truncated, sql: finalSql,
+            policies: first.windowBad || first.scopeViol.length ? [] : [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)], // no policy chunks when the scope check failed; a money-only failure keeps them
           }, DEFAULT_TENANT);
           tin += n2.usage?.input_tokens ?? 0; tout += n2.usage?.output_tokens ?? 0;
           headline = n2.headline; narrative = n2.narrative;
         } catch { /* keep the first narration; the drop step below still applies */ }
-        if (!checkScope(`${headline} ${narrative}`, finalSql).ok) {
-          const nd = dropFlaggedSentences(narrative, finalSql), hd = dropFlaggedSentences(headline, finalSql);
+        if (!checkScope(`${headline} ${narrative}`, finalSql, allowedMoney).ok) {
+          const nd = dropFlaggedSentences(narrative, finalSql, allowedMoney), hd = dropFlaggedSentences(headline, finalSql, allowedMoney);
           narrative = nd.text; scopeInfo.dropped = [...nd.dropped, ...hd.dropped];
           if (hd.dropped.length) headline = hd.text || (nd.text.split(/(?<=[.!?])\s/)[0] ?? "").slice(0, 90);
         }

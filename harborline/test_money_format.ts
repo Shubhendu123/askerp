@@ -1,5 +1,6 @@
 // D-049: unit test, no LLM call. Run: npx tsx harborline/test_money_format.ts
-import { formatMoney, isMoneyColumn, formatMoneyRows } from "../lib/moneyFormat";
+import { formatMoney, isMoneyColumn, formatMoneyRows, moneyContext, moneyFigureProblems } from "../lib/moneyFormat";
+import { checkScope, dropFlaggedSentences } from "../lib/scopeCheck";
 let bad = 0;
 const eq = (a: unknown, b: unknown, m: string) => { if (a !== b) { bad++; console.log(`FAIL ${m}: got ${JSON.stringify(a)} want ${JSON.stringify(b)}`); } else console.log(`ok   ${m}`); };
 eq(formatMoney(416000), "$416K", "416000");
@@ -16,5 +17,20 @@ eq(isMoneyColumn("settlement_fail_rate_pct"), false, "col pct");
 eq(isMoneyColumn("avg_days_failed"), false, "col days");
 eq(isMoneyColumn("counterparty_name"), false, "col name");
 eq(JSON.stringify(formatMoneyRows(["counterparty_name", "total_penalty_usd", "fail_rate_pct"], [["Acme", 416000, 3.8]])), JSON.stringify([["Acme", "$416K", 3.8]]), "rows");
+// D-049b: code-computed totals + money-figure check (the real penalties rows)
+const cols = ["counterparty_name", "reliability_tier", "total_penalties_usd"];
+const rows = [["Hawick Dunn", "D", 211230.78], ["Kendal Prowse", "D", 204795.45], ["Ilkley Marr", "D", 107072.32], ["Nantwich Strand", "D", 88940.35]];
+const ctx = moneyContext(cols, rows);
+eq(ctx.lines.length, 1, "one money column gets a totals line");
+eq(ctx.lines[0].includes("top 2 rows together = $416K"), true, "top-2 sum pre-formatted as $416K");
+eq(moneyFigureProblems("Top 2 counterparties drive $416M in penalties", ctx.allowed).join(), "$416M", "the $416M mis-scale is caught");
+eq(moneyFigureProblems("Hawick Dunn ($211.2K) and Kendal Prowse ($204.8K) account for $416.0K", ctx.allowed).length, 0, "correct figures pass");
+eq(moneyFigureProblems("Four counterparties drive $611.9K (top-4 sum)", ctx.allowed).length, 0, "a code-computed top-4 sum passes");
+eq(moneyFigureProblems("a total of 416 million dollars", ctx.allowed).join(), "416 million dollars", "spelled-out mis-scale is caught");
+eq(moneyFigureProblems("Anything $5M", []).length, 0, "no money columns => no check");
+const sc = checkScope("Top 2 drive $416M. Hawick Dunn is $211.2K.", "SELECT 1 FROM harborline.stl_fail_penalty", ctx.allowed);
+eq(sc.ok, false, "scope check fails on a bad money figure");
+const dd = dropFlaggedSentences("Top 2 drive $416M. Hawick Dunn is $211.2K.", "SELECT 1", ctx.allowed);
+eq(dd.text, "Hawick Dunn is $211.2K.", "only the bad-money sentence is dropped");
 console.log(bad ? `${bad} FAILED` : "ALL PASS");
 process.exit(bad ? 1 : 0);

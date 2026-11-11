@@ -30,3 +30,52 @@ export function formatMoneyRows(columns: string[], rows: unknown[][]): unknown[]
     return num === null ? v : formatMoney(num);
   }));
 }
+
+// ---- D-049b: totals are computed in code; every money figure in a narration is checked against code-computed values ----
+
+export interface MoneyContext {
+  /** Values (USD) a narration may legitimately quote: money cells, column totals, running top-N sums. */
+  allowed: number[];
+  /** Pre-formatted lines handed to the narrator ("use verbatim; never do arithmetic"). */
+  lines: string[];
+}
+
+const toNum = (v: unknown): number | null =>
+  typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : typeof v === "string" && v.trim() !== "" && !isNaN(Number(v)) ? Number(v) : null;
+
+export function moneyContext(columns: string[], rows: unknown[][]): MoneyContext {
+  const allowed: number[] = [], lines: string[] = [];
+  columns.forEach((name, j) => {
+    if (!isMoneyColumn(name)) return;
+    const col = rows.map((r) => toNum((r as unknown[])[j])).filter((x): x is number => x !== null);
+    if (!col.length) return;
+    col.forEach((v) => allowed.push(Math.abs(v)));
+    if (col.length < 2) return;
+    let run = 0;
+    const tops: string[] = [];
+    col.forEach((v, i) => {
+      run += v;
+      allowed.push(Math.abs(run));
+      if (i >= 1 && i <= 4) tops.push(`top ${i + 1} rows together = ${formatMoney(run)}`);
+    });
+    lines.push(`${name}: total of all ${col.length} returned rows = ${formatMoney(run)}; ${tops.join("; ")} (rows in the order returned)`);
+  });
+  return { allowed, lines };
+}
+
+const FIG = /\$\s?(\d[\d,]*\.?\d*)\s?(K|M|B|bn|thousand|million|billion)?\b|(\d[\d,]*\.?\d*)\s*(thousand|million|billion)\s+dollars/gi;
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
+
+/** Money figures in `text` that match no allowed value (within 6% - rounding - so a x1000 mis-scale is always caught). */
+export function moneyFigureProblems(text: string, allowed: number[]): string[] {
+  if (!allowed.length) return [];
+  const bad: string[] = [];
+  for (const m of Array.from(text.matchAll(FIG))) {
+    const raw = (m[1] ?? m[3]).replace(/,/g, "");
+    const n = parseFloat(raw) * (SCALE[(m[2] ?? m[4] ?? "").toLowerCase()] ?? 1);
+    if (!isFinite(n) || n === 0) continue;
+    const ok = allowed.some((v) => (v < 1000 ? Math.abs(n - v) <= 1 : Math.abs(n - v) / v <= 0.06));
+    if (!ok) bad.push(m[0].trim());
+  }
+  return bad;
+}

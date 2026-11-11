@@ -2,7 +2,10 @@
 // (fidelity_scope), with one fix: a bare year-like token ("2026") is NOT a stated time window.
 //   1. window: the narration states a time window ("trailing 12 months", "last quarter", "March 2026") but the executed SQL has no date logic
 //   2. scope: SLA/client-tier or counterparty-tier language when the SQL is not per client / per counterparty
+// D-049b: a money figure that matches no pre-formatted value or code-computed total is a violation.
 // Pipeline (route.ts): narrate -> check -> if it fails, narrate again WITHOUT policy chunks -> check -> if it still fails, drop the flagged sentences.
+
+import { moneyFigureProblems } from "./moneyFormat";
 
 export const SCOPE_CHECK_TENANTS = new Set(["harborline"]);
 
@@ -15,10 +18,11 @@ export interface ScopeResult {
   windowClaims: string[];
   windowBad: boolean;
   scopeViol: string[];
+  moneyBad: string[];
   ok: boolean;
 }
 
-export function checkScope(text: string, sql: string): ScopeResult {
+export function checkScope(text: string, sql: string, allowedMoney: number[] = []): ScopeResult {
   const windowClaims = Array.from(new Set(Array.from(text.matchAll(WINDOW)).map((m) => m[0].toLowerCase()))).sort();
   const windowBad = windowClaims.length > 0 && !SQL_DATE.test(sql);
   const t = text.replace(NEUTRAL, " ");
@@ -29,14 +33,15 @@ export function checkScope(text: string, sql: string): ScopeResult {
   if (/counterpart\w*\s+tier|tier[- ][abcd]\b|\btier\s+[abcd]\b|\btiers?\b/i.test(t) && !(usesCp || usesClient)) scopeViol.push("tier language but SQL is not per counterparty/client");
   if (/POL-001/.test(t) && !usesClient) scopeViol.push("cites POL-001 without a per-client SQL");
   if (/POL-007/.test(t) && !usesCp) scopeViol.push("cites POL-007 without a per-counterparty SQL");
-  return { windowClaims, windowBad, scopeViol, ok: !windowBad && scopeViol.length === 0 };
+  const moneyBad = moneyFigureProblems(text, allowedMoney);
+  return { windowClaims, windowBad, scopeViol, moneyBad, ok: !windowBad && scopeViol.length === 0 && moneyBad.length === 0 };
 }
 
 const splitSentences = (s: string): string[] => s.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
 
 /** Last resort: remove every sentence that fails the check on its own. Returns the cleaned text and what was removed. */
-export function dropFlaggedSentences(text: string, sql: string): { text: string; dropped: string[] } {
+export function dropFlaggedSentences(text: string, sql: string, allowedMoney: number[] = []): { text: string; dropped: string[] } {
   const keep: string[] = [], dropped: string[] = [];
-  for (const sent of splitSentences(text)) (checkScope(sent, sql).ok ? keep : dropped).push(sent);
+  for (const sent of splitSentences(text)) (checkScope(sent, sql, allowedMoney).ok ? keep : dropped).push(sent);
   return { text: keep.join(" "), dropped };
 }

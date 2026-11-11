@@ -1,4 +1,4 @@
-import { formatMoneyRows } from "./moneyFormat";
+import { formatMoneyRows, moneyContext } from "./moneyFormat";
 import Anthropic from "@anthropic-ai/sdk";
 import { getTenantConfig } from "./tenants";
 
@@ -11,7 +11,8 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const POLICY_RULE = `- POLICY CITATIONS: if a "Policy rules retrieved" section is provided, cite a policy ONLY when a specific claim in your narrative depends on that rule (a threshold, target, criterion or procedure it states, e.g. "below the 99.0% PLATINUM target (POL-001 §2)"). Do not cite to add background, and do not use a retrieved policy to make claims the question and the data do not call for - if the answer is just a number or a ranking, say it without policy commentary. Cite in the form (POL-001 §2), using exactly the label given. Never cite a policy that is not listed in that section, and never cite when no such section is provided. SCOPE: apply a policy only to the entity type it governs (shown as "governs"): counterparty tiers describe individual counterparties and SLA targets are per client - never use them to grade Harborline as a whole, never mention tiers or SLAs for an overall figure.`;
 
 // D-048: narration fidelity. The narrator describes time window / filters / grain only as they appear in the executed SQL.
-const FIDELITY_RULE = `- FIDELITY: describe the time window, filters and grain ONLY as stated in the "Executed SQL facts" section. If it says there is no date filter, do not state or imply any period (no "trailing 12 months", "last quarter", "year to date", "recent", "this year"); say nothing about the period, or say "across all periods in the data". Mention a filter (e.g. only settled/failed instructions, a market or status) only if it is listed. Do not add context the SQL does not support.`;
+const FIDELITY_RULE = `- FIDELITY: describe the time window, filters and grain ONLY as stated in the "Executed SQL facts" section. If it says there is no date filter, do not state or imply any period (no "trailing 12 months", "last quarter", "year to date", "recent", "this year"); say nothing about the period, or say "across all periods in the data". Mention a filter (e.g. only settled/failed instructions, a market or status) only if it is listed. Do not add context the SQL does not support.
+- NO ARITHMETIC: never add, subtract, multiply, divide, average or rescale numbers yourself. Quote money only exactly as it appears in "Result data" or "Pre-computed totals" (keep the K/M/B unit). If you need a total or sum that is not listed, do not state one.`;
 // D-048: appended only when non-policy documents (agreements, guides, notices, incident reports, regulation) are supplied.
 const DOC_RULE = `- DOCUMENTS & PRECEDENCE: documents are cited in the form shown, e.g. (CA-001 §2), (MG-IT v2.0 §1), (EVT-2630 §3). When a client agreement or regulation overrides a standard policy for this answer, say so explicitly and cite BOTH, e.g. "Eastgate's agreement sets 98.5% (CA-001 §2), overriding the standard PLATINUM 99.0% (POL-001 §2)". Use only the document version shown; never mention superseded versions. Take every number from the result data or the document text - never invent amounts. When a client agreement chunk and the policy chunk it overrides are both provided, the narrative MUST name both values and contain both citations plus the word "overrides" or "instead of" (e.g. "98.5% (CA-001 §2) instead of the standard 99.0% (POL-001 §2)"); when a contract caps or extends a liability, state the cap or extension and what the data amount would be without it. If no result rows were produced because no SQL was run, answer only from the documents and cite at least one.`;
 const FIDELITY_TENANTS = new Set(["harborline"]);
@@ -118,6 +119,7 @@ export async function narrate(
     "Result data:",
     noSql ? "No SQL was run for this question; answer from the documents below only." : summariseRows(columns, FIDELITY_TENANTS.has(tenant) ? formatMoneyRows(columns, rows) : rows, row_count), // D-049: money pre-formatted K/M/B in code (harborline only)
     ...(sql && FIDELITY_TENANTS.has(tenant) ? ["", "Executed SQL facts:", sqlFacts(sql)] : []),
+    ...(FIDELITY_TENANTS.has(tenant) && !noSql && moneyContext(columns, rows).lines.length ? ["", "Pre-computed totals (computed in code; use verbatim):", ...moneyContext(columns, rows).lines] : []),
     ...(policies && policies.length > 0
       ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}]${p.governs ? ` (governs: ${p.governs})` : ""}${p.doc_type && p.doc_type !== "policy" ? ` (${p.doc_type}, authority_rank ${p.authority_rank ?? "n/a"}, ${p.access_level ?? ""})` : ""} ${p.text.slice(0, 1200)}`)]
       : []),
