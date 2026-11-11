@@ -108,6 +108,8 @@ RULES:
 8. Never use SELECT * — name columns explicitly
 9. Thresholds, targets and criteria (SLA targets, escalation limits, ageing cut-offs, tier definitions) must come from the retrieved policy context; never invent one
 10. If the question cannot be answered from the provided context and this warehouse's data (e.g. trading-desk P&L, headcount, anything outside custody operations; another tenant's data), set "sql" to null and explain why in "reasoning" — do not invent tables or columns
+11. GOVERNED METRIC: when a retrieved metric answers the question exactly (its name, synonyms or example questions match), run THAT metric's formula unchanged - at most adding ORDER BY / LIMIT - and set "metric_used" to its name. Do not re-derive its thresholds, window or filters.
+12. NULLs in exclusions: fail_reason_code (and other fail/waiver codes) is NULL for settled rows. To exclude a code write (col IS NULL OR col <> 'CODE'); a bare col <> 'CODE' silently drops every settled row and makes rates and counts wrong.
 
 For sentiment: use the metric's sentiment field from the SEMANTIC LAYER above.
 "positive" = higher is better, "negative" = higher is worse, "none" = directional/neutral.
@@ -135,6 +137,9 @@ A: {"sql":"SELECT m.tax_reclaim_complexity, ROUND(100.0*COUNT(*) FILTER (WHERE i
 
 Q: What are our assets under custody by client segment?
 A: {"sql":"SELECT c.client_segment, ROUND(SUM(p.market_value_usd),2) AS auc_usd FROM harborline.pos_daily_position p JOIN harborline.dim_client c ON c.client_key=p.client_key WHERE p.position_date_key=(SELECT MAX(position_date_key) FROM harborline.pos_daily_position) GROUP BY 1 ORDER BY 2 DESC","metric_used":"assets_under_custody_usd","sentiment":"positive","tables_referenced":["harborline.pos_daily_position","harborline.dim_client"],"reasoning":"Latest-date market value summed per segment.","confidence":"HIGH"}
+
+Q: For each event type, how many client elections were missed and what notice window did those events give?
+A: {"sql":"WITH missed AS (SELECT event_key, COUNT(*) AS missed_elections, ROUND(SUM(estimated_client_impact_usd),2) AS impact_usd FROM harborline.cae_client_election WHERE missed_deadline GROUP BY event_key) SELECT e.event_type, ROUND(AVG(e.notice_window_days),1) AS avg_notice_days, SUM(m.missed_elections) AS missed_elections, ROUND(SUM(m.impact_usd),2) AS impact_usd FROM missed m JOIN harborline.cae_event e ON e.event_key=m.event_key GROUP BY 1 ORDER BY 3 DESC","metric_used":"missed_election_rate_pct","sentiment":"negative","tables_referenced":["harborline.cae_client_election","harborline.cae_event"],"reasoning":"Aggregate the election fact table per event in its own CTE (one fact table per SELECT), then join the pre-aggregated rows to the event table for its notice window.","confidence":"HIGH"}
 
 Q: What is our trading desk's P&L?
 A: {"sql":null,"metric_used":null,"sentiment":"none","tables_referenced":[],"reasoning":"Harborline is a custodian; this warehouse holds no trading or P&L data.","confidence":"HIGH"}`;

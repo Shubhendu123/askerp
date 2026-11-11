@@ -1,0 +1,303 @@
+{
+ "headline": {
+  "files": [
+   "harborline_d048_run1_2026-11-10T20-35-35-620Z_3162.jsonl",
+   "harborline_d048_run2_2026-11-10T20-38-51-436Z_f52a.jsonl",
+   "harborline_d048_run3_2026-11-10T20-42-14-716Z_b8bc.jsonl"
+  ],
+  "n_runs": 3,
+  "n_answerable": 26,
+  "A_all": {
+   "mean": 2.7179487179487176,
+   "min": 2.6538461538461537,
+   "max": 2.769230769230769,
+   "per_run": [
+    2.769230769230769,
+    2.730769230769231,
+    2.6538461538461537
+   ]
+  },
+  "valid_sql": {
+   "mean": 24.666666666666668,
+   "min": 24,
+   "max": 25
+  },
+  "controls_passed": [
+   4,
+   4,
+   4
+  ],
+  "per_tier": {
+   "simple": {
+    "mean": 3.0,
+    "min": 3.0,
+    "max": 3.0,
+    "n_questions": 8
+   },
+   "medium": {
+    "mean": 2.75,
+    "min": 2.625,
+    "max": 3.0,
+    "n_questions": 8
+   },
+   "hard cross-area": {
+    "mean": 2.533333333333333,
+    "min": 2.2,
+    "max": 3.0,
+    "n_questions": 5
+   },
+   "hybrid": {
+    "mean": 2.4,
+    "min": 2.4,
+    "max": 2.4,
+    "n_questions": 5
+   }
+  }
+ },
+ "ablation": {
+  "columns": [
+   "mode",
+   "n",
+   "A all-26",
+   "simple",
+   "medium",
+   "hard",
+   "hybrid",
+   "R_recall",
+   "R_precision",
+   "policy cov",
+   "tokens in / question",
+   "cost / run"
+  ],
+  "rows": [
+   {
+    "mode": "rrf",
+    "n": "3",
+    "A all-26": "2.72 [2.65\u20132.77]",
+    "simple": "3.00",
+    "medium": "2.75 [2.62\u20133.00]",
+    "hard": "2.53 [2.20\u20133.00]",
+    "hybrid": "2.40 [2.40\u20132.40]",
+    "R_recall": "0.98",
+    "R_precision": "0.30",
+    "policy cov": "0.89",
+    "tokens in / question": "9,452",
+    "cost / run": "$0.35",
+    "A_mean": 2.72,
+    "A_min": 2.65,
+    "A_max": 2.77,
+    "relative_cost": 1.0
+   },
+   {
+    "mode": "dense",
+    "n": "3",
+    "A all-26": "2.72 [2.65\u20132.77]",
+    "simple": "3.00",
+    "medium": "2.88 [2.62\u20133.00]",
+    "hard": "2.40",
+    "hybrid": "2.33 [2.20\u20132.40]",
+    "R_recall": "0.97",
+    "R_precision": "0.24",
+    "policy cov": "0.89",
+    "tokens in / question": "10,578",
+    "cost / run": "$0.38",
+    "A_mean": 2.72,
+    "A_min": 2.65,
+    "A_max": 2.77,
+    "relative_cost": 1.09
+   },
+   {
+    "mode": "bm25",
+    "n": "2",
+    "A all-26": "2.69 [2.69\u20132.69]",
+    "simple": "3.00",
+    "medium": "3.00",
+    "hard": "2.40",
+    "hybrid": "2.00",
+    "R_recall": "0.97",
+    "R_precision": "0.23",
+    "policy cov": "0.89",
+    "tokens in / question": "10,484",
+    "cost / run": "$0.37",
+    "A_mean": 2.69,
+    "A_min": 2.69,
+    "A_max": 2.69,
+    "relative_cost": 1.06
+   },
+   {
+    "mode": "schema",
+    "n": "2",
+    "A all-26": "2.67 [2.65\u20132.69]",
+    "simple": "2.88",
+    "medium": "2.81",
+    "hard": "2.40",
+    "hybrid": "2.40",
+    "R_recall": "1.00",
+    "R_precision": "0.03",
+    "policy cov": "1.00",
+    "tokens in / question": "46,146",
+    "cost / run": "$1.38",
+    "A_mean": 2.67,
+    "A_min": 2.65,
+    "A_max": 2.69,
+    "relative_cost": 3.94
+   }
+  ],
+  "source": "DECISIONS.md D-047"
+ },
+ "stability": [
+  {
+   "question": "What is our overall settlement fail rate?",
+   "verdict": "STABLE",
+   "rows_same": true,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "What are our total assets under custody?",
+   "verdict": "STABLE",
+   "rows_same": true,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "Which counterparties' settlement fails cost us the most in penalties?",
+   "verdict": "UNSTABLE",
+   "rows_same": true,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [
+    "unit:$416M"
+   ],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "Which Platinum clients missed their SLA settlement target last month?",
+   "verdict": "UNSTABLE",
+   "rows_same": false,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "Which corporate action elections did we miss, and what was the notice window?",
+   "verdict": "UNSTABLE",
+   "rows_same": false,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [
+    "unit:$22.3M"
+   ],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "Which counterparties meet our tier-D criteria?",
+   "verdict": "STABLE",
+   "rows_same": true,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  },
+  {
+   "question": "What is our trading desk's P&L?",
+   "verdict": "STABLE",
+   "rows_same": true,
+   "headline_same": true,
+   "outcomes": [
+    "declined",
+    "declined",
+    "declined"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3
+  }
+ ],
+ "problems": [
+  {
+   "problem": "Crowding-out: ranked and expanded context chunks displaced the metric and table chunks a question needed",
+   "fix": "Table expansion with R_recall/R_precision scoring; policy chunks capped at 3 per request (D-045)",
+   "adr": "D-041, D-045"
+  },
+  {
+   "problem": "Cross-tenant ranking drift: adding a tenant shifted other tenants' near-tied ranks (Voyage vectors move with the embedding call's batch composition)",
+   "fix": "Embedding isolation: legacy tenants embed in one call as before, every other tenant in its own batches",
+   "adr": "D-046"
+  },
+  {
+   "problem": "Fan-out count inflation: joining two fact tables row-to-row multiplied rows and inflated counts and sums",
+   "fix": "Validator rule: one SELECT may reference at most one fact table (parent-child exemption), with a classified retry",
+   "adr": "D-047"
+  },
+  {
+   "problem": "Tier-D instability: the model re-derived the tier-D criteria on every run and returned a different list each time",
+   "fix": "Governed metric encoding POL-007 \u00a72 exactly, with the formula run unchanged",
+   "adr": "D-049"
+  }
+ ],
+ "mro_retrieval": {
+  "baseline": "D-044 commit 5e423b1 (retrieval only, rrf k=10, expansion on, no LLM call)",
+  "checks": {
+   "S02": {
+    "status": "DRIFT (ids and order identical; scores differ by max 0.0021)",
+    "ids_identical": true,
+    "scores_bit_identical": false,
+    "max_abs_score_diff": 0.0021000000000000185,
+    "n_chunks": 15,
+    "policy_or_non_mro_chunks": 0,
+    "repeat_run_same_code_max_diff": 0.0,
+    "second_run_vs_d044_max_diff": 0.0021000000000000185,
+    "second_run_bit_identical_to_d044": false
+   },
+   "M08": {
+    "status": "DRIFT (ids and order identical; scores differ by max 0.0016)",
+    "ids_identical": true,
+    "scores_bit_identical": false,
+    "max_abs_score_diff": 0.0016000000000000458,
+    "n_chunks": 16,
+    "policy_or_non_mro_chunks": 0,
+    "repeat_run_same_code_max_diff": 0.0016000000000000458,
+    "second_run_vs_d044_max_diff": 0.0,
+    "second_run_bit_identical_to_d044": true
+   }
+  },
+  "note": "Embeddings come from Voyage; vectors for identical text shift slightly between calls (D-046 gate 4). Ids and order are identical to D-044; score differences are reported as drift, not failure.",
+  "verdict": "Retrieval only (no LLM). Ids and order are identical to D-044 on S02 and M08, with zero policy/non-MRO chunks. Scores are reported as DRIFT, not failure: M08 differs by 0.0016 on one run and reproduces D-044 bit-identically on the other (same code, so Voyage service variance). S02 differs from the single D-044 reference run by 0.0021 in both current runs; the two current runs agree with each other, so this is NOT shown to be variance - either the D-044 reference run was the outlier or something shifted S02 slightly. Not resolved; ranking is unaffected."
+ }
+}

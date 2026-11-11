@@ -33,7 +33,7 @@ def citations(text, retrieved):
     return round(1 - len(bad) / len(cited), 4), bad
 
 # D-048 narration fidelity + policy scope checks (ground truth = the executed SQL itself)
-WINDOW = re.compile(r"\b(trailing|rolling|last\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|past\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|(?:previous|prior)\s+(?:\d+\s+)?(?:month|quarter|year)s?|year[- ]to[- ]date|ytd|this\s+(?:month|quarter|year)|over\s+the\s+(?:last|past)|recent(?:ly)?|\d+[- ]months?|\d+[- ]days?\s+(?:window|period)|Q[1-4]\s*20\d\d|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d|20\d\d)\b", re.I)
+WINDOW = re.compile(r"\b(trailing|rolling|last\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|past\s+(?:\d+\s+)?(?:month|quarter|year|week)s?|(?:previous|prior)\s+(?:\d+\s+)?(?:month|quarter|year)s?|year[- ]to[- ]date|ytd|this\s+(?:month|quarter|year)|over\s+the\s+(?:last|past)|recent(?:ly)?|\d+[- ]months?|\d+[- ]days?\s+(?:window|period)|Q[1-4]\s*20\d\d|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+20\d\d)\b", re.I)  # D-049: a bare year (20\d\d) alone is not a window
 SQL_DATE = re.compile(r"date_key|full_date|year_num|month_num|quarter_num|current_date|now\(\)|interval|date_trunc|date\s+'", re.I)
 TIER_WORDS = re.compile(r"\b(tier|tiers|platinum|gold|silver|bronze|sla|sla tier)\b", re.I)
 

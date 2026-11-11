@@ -43,7 +43,7 @@ export const TENANTS: Record<string, TenantConfig> = {
   harborline: {
     id: "harborline",
     company: "Harborline Global Custody",
-    headerPill: "Harborline Global Custody ERP",
+    headerPill: "Harborline Global Custody",
     searchPlaceholder: "Ask anything about Harborline — settlement, custody, corporate actions, clients…",
     analysisLabel: "Analysis · Harborline Global Custody",
     warehouseLabel: "Harborline Global Custody warehouse",

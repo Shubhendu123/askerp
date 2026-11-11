@@ -8,6 +8,7 @@ import {
   Bookmark,
   Database,
   Activity,
+  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 
@@ -17,6 +18,8 @@ interface NavItem {
   icon: LucideIcon;
   /** Structural stub — present for navigational signal, not wired up. */
   soon?: boolean;
+  /** D-049: shown only for these tenants (undefined = everyone). */
+  tenants?: string[];
 }
 
 const NAV: NavItem[] = [
@@ -25,10 +28,13 @@ const NAV: NavItem[] = [
   { label: "Saved", href: "/saved", icon: Bookmark, soon: true },
   { label: "Data", href: "/data", icon: Database, soon: true },
   { label: "Traces", href: "/traces", icon: Activity }, // D-043 observability
+  { label: "Evals", href: "/evals", icon: FlaskConical, tenants: ["harborline"] }, // D-049: committed eval results (harborline only)
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ tenantId = "mro" }: { tenantId?: string }) {
   const pathname = usePathname();
+  // D-049: for harborline the structural "Soon" stubs are hidden; other tenants are unchanged.
+  const items = NAV.filter((n) => (!n.tenants || n.tenants.includes(tenantId)) && !(tenantId === "harborline" && n.soon));
 
   return (
     <nav
@@ -39,7 +45,7 @@ export default function Sidebar() {
         borderRight: "1px solid var(--border)",
       }}
     >
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active = pathname === item.href || (item.href === "/chat" && pathname === "/");
         const Icon = item.icon;
 

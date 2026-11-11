@@ -1,7 +1,9 @@
 import Sidebar from "./Sidebar";
 import TopHeader from "./TopHeader";
+import { getActiveTenantConfig } from "@/lib/tenants";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const tenant = getActiveTenantConfig();
   return (
     <div
       className="flex flex-col"
@@ -12,7 +14,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Below: [150px sidebar] [1fr main] */}
       <div className="flex flex-1 min-h-0">
-        <Sidebar />
+        <Sidebar tenantId={tenant.id} />
         <main
           className="flex-1 min-w-0 overflow-y-auto"
           style={{ background: "var(--bg-page)", padding: 16 }}

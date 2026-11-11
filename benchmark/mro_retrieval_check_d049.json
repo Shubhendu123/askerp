@@ -1,0 +1,29 @@
+{
+ "baseline": "D-044 commit 5e423b1 (retrieval only, rrf k=10, expansion on, no LLM call)",
+ "checks": {
+  "S02": {
+   "status": "DRIFT (ids and order identical; scores differ by max 0.0021)",
+   "ids_identical": true,
+   "scores_bit_identical": false,
+   "max_abs_score_diff": 0.0021000000000000185,
+   "n_chunks": 15,
+   "policy_or_non_mro_chunks": 0,
+   "repeat_run_same_code_max_diff": 0.0,
+   "second_run_vs_d044_max_diff": 0.0021000000000000185,
+   "second_run_bit_identical_to_d044": false
+  },
+  "M08": {
+   "status": "DRIFT (ids and order identical; scores differ by max 0.0016)",
+   "ids_identical": true,
+   "scores_bit_identical": false,
+   "max_abs_score_diff": 0.0016000000000000458,
+   "n_chunks": 16,
+   "policy_or_non_mro_chunks": 0,
+   "repeat_run_same_code_max_diff": 0.0016000000000000458,
+   "second_run_vs_d044_max_diff": 0.0,
+   "second_run_bit_identical_to_d044": true
+  }
+ },
+ "note": "Embeddings come from Voyage; vectors for identical text shift slightly between calls (D-046 gate 4). Ids and order are identical to D-044; score differences are reported as drift, not failure.",
+ "verdict": "Retrieval only (no LLM). Ids and order are identical to D-044 on S02 and M08, with zero policy/non-MRO chunks. Scores are reported as DRIFT, not failure: M08 differs by 0.0016 on one run and reproduces D-044 bit-identically on the other (same code, so Voyage service variance). S02 differs from the single D-044 reference run by 0.0021 in both current runs; the two current runs agree with each other, so this is NOT shown to be variance - either the D-044 reference run was the outlier or something shifted S02 slightly. Not resolved; ranking is unaffected."
+}

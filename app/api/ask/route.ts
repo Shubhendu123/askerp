@@ -1,3 +1,4 @@
+import { SCOPE_CHECK_TENANTS, checkScope, dropFlaggedSentences } from "@/lib/scopeCheck";
 import { NextRequest, NextResponse } from "next/server";
 import { generateSQL, getTenantSchemaInfo, USE_RETRIEVAL, DEFAULT_TENANT } from "@/lib/sqlGenerator";
 import { runWithValidation } from "@/lib/sqlValidator";
@@ -185,6 +186,7 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
   let headline = "";
   let narrative = "";
   let narrateTimeMs = 0;
+  let scopeInfo: { first_violations: string[]; regenerated: boolean; dropped: string[] } | null = null;
   try {
     const t = Date.now();
     const n = await narrate({
@@ -198,10 +200,31 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
       sql: finalSql,
       policies: [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)],
     }, DEFAULT_TENANT);
-    narrateTimeMs = Date.now() - t;
     headline = n.headline;
     narrative = n.narrative;
-    tc.narration_tokens_in = n.usage?.input_tokens ?? 0; tc.narration_tokens_out = n.usage?.output_tokens ?? 0;
+    let tin = n.usage?.input_tokens ?? 0, tout = n.usage?.output_tokens ?? 0;
+    // D-049 scope check (harborline only): narrate -> check -> regenerate ONCE without policy chunks -> check -> drop the flagged sentences
+    if (SCOPE_CHECK_TENANTS.has(DEFAULT_TENANT)) {
+      const first = checkScope(`${headline} ${narrative}`, finalSql);
+      if (!first.ok) {
+        scopeInfo = { first_violations: [...(first.windowBad ? ["window: " + first.windowClaims.join(", ")] : []), ...first.scopeViol], regenerated: true, dropped: [] };
+        try {
+          const n2 = await narrate({
+            question, metric_used: sqlResult.metric_used ?? null, sentiment: sqlResult.sentiment ?? null, columns: execResult.columns, rows: execResult.rows,
+            row_count: execResult.row_count, truncated: execResult.truncated, sql: finalSql, policies: [], // no policy chunks
+          }, DEFAULT_TENANT);
+          tin += n2.usage?.input_tokens ?? 0; tout += n2.usage?.output_tokens ?? 0;
+          headline = n2.headline; narrative = n2.narrative;
+        } catch { /* keep the first narration; the drop step below still applies */ }
+        if (!checkScope(`${headline} ${narrative}`, finalSql).ok) {
+          const nd = dropFlaggedSentences(narrative, finalSql), hd = dropFlaggedSentences(headline, finalSql);
+          narrative = nd.text; scopeInfo.dropped = [...nd.dropped, ...hd.dropped];
+          if (hd.dropped.length) headline = hd.text || (nd.text.split(/(?<=[.!?])\s/)[0] ?? "").slice(0, 90);
+        }
+      }
+    }
+    narrateTimeMs = Date.now() - t;
+    tc.narration_tokens_in = tin; tc.narration_tokens_out = tout;
   } catch { /* narrator failure is non-fatal */ }
   tc.narrate_ms = narrateTimeMs; tc.rows_returned = execResult.row_count; tc.success = true;
 
@@ -214,6 +237,7 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
     reasoning: sqlResult.reasoning ?? null,
     headline,
     narrative,
+    scope_check: scopeInfo,
     columns: execResult.columns,
     rows: execResult.rows,
     row_count: execResult.row_count,

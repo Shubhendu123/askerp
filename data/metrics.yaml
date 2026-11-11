@@ -1965,6 +1965,56 @@ metrics:
       - "What is the fail rate by counterparty tier?"
       - "How much worse are tier D counterparties?"
 
+  - name: counterparties_meeting_tier_d_criteria
+    tenant: harborline
+    domain: Settlement
+    sentiment: negative
+    grain: One row per counterparty that meets the POL-007 section 2 tier-D test over the trailing 12 months ending at the latest settlement date in the data.
+    tables:
+      - harborline.stl_trade_instruction
+      - harborline.dim_counterparty
+      - harborline.dim_date
+    policy_refs: [POL-007#2]
+    description: |
+      Counterparties that meet the tier-D criteria of POL-007 section 2, computed from actual performance (not from the
+      assigned dim_counterparty.reliability_tier label): fail rate above 10.0% AND average days failed above 4.0, over the
+      trailing 12 months, excluding fails with fail_reason_code = MARKET_RESTRICTION. The window ends at the latest
+      intended settlement date in the data. Use this metric as-is for "which counterparties meet / are in tier D";
+      do not substitute other thresholds.
+    formula: |
+      WITH latest AS (
+        SELECT MAX(d.full_date) AS max_date
+        FROM harborline.stl_trade_instruction i
+        JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key
+      ),
+      perf AS (
+        SELECT cp.counterparty_name,
+               cp.reliability_tier AS assigned_tier,
+               COUNT(*) AS instructions,
+               COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') AS failed_instructions,
+               ROUND(100.0 * COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') / COUNT(*), 2) AS fail_rate_pct,
+               ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status = 'FAILED'), 2) AS avg_days_failed
+        FROM harborline.stl_trade_instruction i
+        JOIN harborline.dim_counterparty cp ON cp.counterparty_key = i.counterparty_key
+        JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key
+        CROSS JOIN latest l
+        WHERE i.settlement_status IN ('SETTLED', 'FAILED')
+          AND d.full_date > l.max_date - INTERVAL 12 MONTH
+          AND (i.fail_reason_code IS NULL OR i.fail_reason_code <> 'MARKET_RESTRICTION')
+        GROUP BY cp.counterparty_name, cp.reliability_tier
+      )
+      SELECT counterparty_name, assigned_tier, instructions, failed_instructions, fail_rate_pct, avg_days_failed
+      FROM perf
+      WHERE fail_rate_pct > 10 AND avg_days_failed > 4
+      ORDER BY fail_rate_pct DESC
+    dimensions_allowed: []
+    synonyms: [tier D counterparties, counterparties meeting tier-D criteria, chronic counterparties, which counterparties are tier D, restricted counterparties, counterparties in tier D]
+    definition_owner: Operational Risk
+    format: table
+    example_questions:
+      - "Which counterparties meet our tier-D criteria?"
+      - "Which counterparties are chronic fail risks under POL-007?"
+
   - name: penalty_total_usd
     tenant: harborline
     domain: Settlement

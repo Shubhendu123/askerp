@@ -1,0 +1,20 @@
+// D-049: unit test, no LLM call. Run: npx tsx harborline/test_money_format.ts
+import { formatMoney, isMoneyColumn, formatMoneyRows } from "../lib/moneyFormat";
+let bad = 0;
+const eq = (a: unknown, b: unknown, m: string) => { if (a !== b) { bad++; console.log(`FAIL ${m}: got ${JSON.stringify(a)} want ${JSON.stringify(b)}`); } else console.log(`ok   ${m}`); };
+eq(formatMoney(416000), "$416K", "416000");
+eq(formatMoney(211200), "$211.2K", "211200");
+eq(formatMoney(1.1e9), "$1.1B", "1.1e9");
+eq(formatMoney(5_000_000), "$5M", "5e6");
+eq(formatMoney(2_000_000), "$2M", "2e6");
+eq(formatMoney(507_800), "$507.8K", "507800");
+eq(formatMoney(950), "$950", "950");
+eq(formatMoney(-2_500_000), "-$2.5M", "negative");
+eq(formatMoney(712_200_000_000), "$712.2B", "AUC");
+eq(isMoneyColumn("total_penalty_usd"), true, "col penalty_usd");
+eq(isMoneyColumn("settlement_fail_rate_pct"), false, "col pct");
+eq(isMoneyColumn("avg_days_failed"), false, "col days");
+eq(isMoneyColumn("counterparty_name"), false, "col name");
+eq(JSON.stringify(formatMoneyRows(["counterparty_name", "total_penalty_usd", "fail_rate_pct"], [["Acme", 416000, 3.8]])), JSON.stringify([["Acme", "$416K", 3.8]]), "rows");
+console.log(bad ? `${bad} FAILED` : "ALL PASS");
+process.exit(bad ? 1 : 0);

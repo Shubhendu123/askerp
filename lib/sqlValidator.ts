@@ -110,7 +110,8 @@ function checkTenantRules(scan: string, info: TenantSchemaInfo): ValidationFailu
           const parent = facts.find((f) => f !== children[0])!;
           const am = scope.match(new RegExp(String.raw`\b${info.schema}\s*\.\s*${parent}\b(?:\s+(?:AS\s+)?(?!(?:JOIN|LEFT|RIGHT|INNER|FULL|CROSS|ON|USING|WHERE|GROUP|ORDER|HAVING|LIMIT)\b)([A-Za-z_]\w*))?`, "i"));
           const alias = am?.[1] ?? parent;
-          const aggArg = new RegExp(String.raw`\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\([^()]*\b${alias}\s*\.`, "i");
+          // D-049: only fan-out-SENSITIVE aggregates of a parent column count: SUM, AVG, COUNT(col). MIN/MAX/COUNT(DISTINCT ...) are idempotent under row duplication.
+          const aggArg = new RegExp(String.raw`\b(?:SUM|AVG|COUNT(?!\s*\(\s*DISTINCT\b))\s*\([^()]*\b${alias}\s*\.`, "i");
           const filt = new RegExp(String.raw`\bFILTER\s*\(\s*WHERE[^()]*\b${alias}\s*\.`, "i");
           // also LEFT JOIN from the parent makes COUNT(*) count parent*child rows
           violating = aggArg.test(scope) || filt.test(scope);

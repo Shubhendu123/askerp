@@ -1,3 +1,4 @@
+import { formatMoneyRows } from "./moneyFormat";
 import Anthropic from "@anthropic-ai/sdk";
 import { getTenantConfig } from "./tenants";
 
@@ -115,7 +116,7 @@ export async function narrate(
     `Rows returned: ${row_count}${truncated ? " (truncated at 100)" : ""}`,
     "",
     "Result data:",
-    noSql ? "No SQL was run for this question; answer from the documents below only." : summariseRows(columns, rows, row_count),
+    noSql ? "No SQL was run for this question; answer from the documents below only." : summariseRows(columns, FIDELITY_TENANTS.has(tenant) ? formatMoneyRows(columns, rows) : rows, row_count), // D-049: money pre-formatted K/M/B in code (harborline only)
     ...(sql && FIDELITY_TENANTS.has(tenant) ? ["", "Executed SQL facts:", sqlFacts(sql)] : []),
     ...(policies && policies.length > 0
       ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}]${p.governs ? ` (governs: ${p.governs})` : ""}${p.doc_type && p.doc_type !== "policy" ? ` (${p.doc_type}, authority_rank ${p.authority_rank ?? "n/a"}, ${p.access_level ?? ""})` : ""} ${p.text.slice(0, 1200)}`)]
