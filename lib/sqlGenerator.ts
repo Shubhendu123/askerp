@@ -111,6 +111,7 @@ RULES:
 11. GOVERNED METRIC: when a retrieved metric answers the question exactly (its name, synonyms or example questions match), run THAT metric's formula unchanged - at most adding ORDER BY / LIMIT - and set "metric_used" to its name. Do not re-derive its thresholds, window or filters.
 12. NULLs in exclusions: fail_reason_code (and other fail/waiver codes) is NULL for settled rows. To exclude a code write (col IS NULL OR col <> 'CODE'); a bare col <> 'CODE' silently drops every settled row and makes rates and counts wrong.
 13. DETERMINISTIC ORDER: every result that returns more than one row must end with an explicit ORDER BY: the main measure first (state the direction the question implies, e.g. worst first), then the entity name (client_name, counterparty_name, market_code ...) as the tie-break. Never leave row order to chance.
+14. GOVERNED METRIC COLUMNS: when rule 11 applies, the final SELECT must return exactly the metric's output columns, with the metric's names, in the metric's order - add no extra column and drop none (filter with WHERE / HAVING instead of changing the SELECT list). No helper columns, no reordering, no renamed aliases.
 
 For sentiment: use the metric's sentiment field from the SEMANTIC LAYER above.
 "positive" = higher is better, "negative" = higher is worse, "none" = directional/neutral.
