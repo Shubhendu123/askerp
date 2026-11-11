@@ -3,6 +3,7 @@
 import type { AskResponse } from "./Workbench";
 import { getTenantConfig, type TenantConfig } from "@/lib/tenants";
 import { formatTitle, formatDuration } from "@/lib/format";
+import { formatValue, humanizeHeader, titleFromQuestion } from "@/lib/valueFormat";
 
 interface Props {
   response: AskResponse | null;
@@ -28,6 +29,17 @@ function primaryValue(response: AskResponse): string {
 
 export default function AnalysisHeader({ response, loading, activeQuestion, tenant = getTenantConfig("mro") }: Props) {
   if (!activeQuestion && !loading) return null;
+
+  // D-050: tenants with the structured answer card (harborline) get a human card title and meaning-based number formatting;
+  // every other tenant keeps the original behaviour below.
+  const semantic = !tenant.showInsightTabs;
+  const cardTitle = semantic
+    ? (response?.title || (response ? titleFromQuestion(activeQuestion ?? response.question ?? "") : activeQuestion))
+    : response?.metric_used ? formatTitle(response.metric_used) : activeQuestion;
+  const bigNumber = response
+    ? semantic ? formatValue(response.columns?.[0] ?? "", (response.rows?.[0] as unknown[] | undefined)?.[0]) : primaryValue(response)
+    : "—";
+  const bigLabel = response && semantic ? humanizeHeader(response.columns[0]) : response ? formatTitle(response.columns[0]) : "";
 
   const isSingleStat =
     response && !response.error &&
@@ -57,9 +69,7 @@ export default function AnalysisHeader({ response, loading, activeQuestion, tena
               className="leading-tight truncate"
               style={{ fontSize: 18, fontWeight: 500, color: "var(--text-primary)" }}
             >
-              {response?.metric_used
-                ? formatTitle(response.metric_used)
-                : activeQuestion}
+              {cardTitle}
             </h2>
             <p className="mt-1" style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
               {response?.error
@@ -79,9 +89,9 @@ export default function AnalysisHeader({ response, loading, activeQuestion, tena
             className="leading-none"
             style={{ fontSize: 30, fontWeight: 500, color: "var(--text-primary)" }}
           >
-            {primaryValue(response!)}
+            {bigNumber}
           </p>
-          <p className="mt-1.5 label-caps">{formatTitle(response!.columns[0])}</p>
+          <p className="mt-1.5 label-caps">{bigLabel}</p>
         </div>
       )}
 

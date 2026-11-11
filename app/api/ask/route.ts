@@ -1,10 +1,12 @@
 import { moneyContext } from "@/lib/moneyFormat";
-import { SCOPE_CHECK_TENANTS, checkScope, dropFlaggedSentences } from "@/lib/scopeCheck";
+import { SCOPE_CHECK_TENANTS, checkScope, dropFlaggedSentences, pctFigures, type CheckContext } from "@/lib/scopeCheck";
+import { resolvePeriod, dateFromKey, type ResolvedPeriod } from "@/lib/period";
+import { fixAcronyms, titleFromQuestion, countContext, countFigures, stripPeriodWords } from "@/lib/valueFormat";
 import { NextRequest, NextResponse } from "next/server";
 import { generateSQL, getTenantSchemaInfo, USE_RETRIEVAL, DEFAULT_TENANT } from "@/lib/sqlGenerator";
 import { runWithValidation } from "@/lib/sqlValidator";
-import { narrate, toNarratorDocs, citesAny } from "@/lib/narrator";
-import { enrichDocuments } from "@/lib/retrieval/retriever";
+import { narrate, toNarratorDocs, citesAny, stripBold } from "@/lib/narrator";
+import { enrichDocuments, findTargetOverrides } from "@/lib/retrieval/retriever";
 import { executeSQL } from "@/lib/db";
 import { retrieveWithRanker, expansionEnabled } from "@/lib/retrieval/retriever";
 import { recordTrace, type TraceData } from "@/lib/tracing";
@@ -183,13 +185,71 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
   let enriched: Awaited<ReturnType<typeof enrichDocuments>> = [];
   try { enriched = await enrichDocuments(question, execResult.columns, execResult.rows as unknown[][], DEFAULT_TENANT, retrievalResp.results.map((r) => r.id)); } catch { /* non-fatal */ }
 
+  // Step 2b' (D-050, harborline only): a client agreement that overrides the standard SLA target for a client in the result (Eastgate CA-001 §2: 98.5%).
+  // The row uses the contract target (and met_target is recomputed); the response lists the override so the UI footnotes it. Skipped unless the
+  // result has a client column, a settlement-rate column and a target column - nothing is guessed.
+  type Applied = { client: string; from: number | null; to: number; source: string; supersedes: string };
+  const overrides: Applied[] = [];
+  const overrideFacts: string[] = [];
+  if (SCOPE_CHECK_TENANTS.has(DEFAULT_TENANT)) {
+    try {
+      const cols = execResult.columns;
+      const ci = cols.findIndex((c) => /^(client_name|client)$/i.test(c)), ti = cols.findIndex((c) => /target/i.test(c)), ri = cols.findIndex((c) => /rate/i.test(c) && !/target/i.test(c)), mi = cols.findIndex((c) => /^met_/i.test(c));
+      if (ci >= 0 && ti >= 0 && ri >= 0) {
+        const found = await findTargetOverrides(cols, execResult.rows as unknown[][], DEFAULT_TENANT);
+        let rows = (execResult.rows as unknown[][]).map((r) => [...r]);
+        for (const ov of found) {
+          const hit = rows.filter((r) => String(r[ci]).toLowerCase() === ov.client.toLowerCase());
+          if (!hit.length) continue;
+          const from = Number(hit[0][ti]);
+          for (const r of hit) { r[ti] = ov.target; if (mi >= 0 && typeof r[mi] === "boolean") r[mi] = Number(r[ri]) >= ov.target; }
+          if (mi >= 0) rows = rows.filter((r) => !(String(r[ci]).toLowerCase() === ov.client.toLowerCase() && r[mi] === true)); // met the contract target -> not a miss
+          overrides.push({ client: ov.client, from: isFinite(from) ? from : null, to: ov.target, source: ov.citation, supersedes: ov.supersedes });
+          const have = new Set(enriched.map((e) => e.id));
+          for (const d of [ov.policyChunk, ov.chunk]) if (d && !have.has(d.id)) { enriched.push(d); have.add(d.id); }
+          overrideFacts.push(`Contract override applied to the table: ${ov.client}'s settlement-rate target is ${ov.target}% (${ov.citation}), overriding the standard ${isFinite(from) ? from.toFixed(1) : "PLATINUM"}% (${ov.supersedes}); that row already uses ${ov.target}%. Say this in exactly ONE bullet (do not repeat it in any other bullet) and cite both ${ov.citation} and ${ov.supersedes}.`);
+        }
+        if (overrides.length) { execResult.rows = rows; execResult.row_count = rows.length; }
+      }
+    } catch { /* non-fatal: the table stays as the SQL returned it */ }
+  }
+
+  // Step 2c (D-050, harborline only): facts computed in code - the resolved relative period and population sizes ("all N" is only valid for the full population)
+  const harbor = SCOPE_CHECK_TENANTS.has(DEFAULT_TENANT);
+  let period: ResolvedPeriod | null = null;
+  let populations: number[] | undefined;
+  const facts: string[] = [...overrideFacts];
+  if (harbor) {
+    const toN = (v: unknown) => Number(typeof v === "bigint" ? Number(v) : v);
+    try {
+      const mx = await executeSQL("SELECT max(actual_settle_date_key) AS d FROM harborline.stl_trade_instruction");
+      const latest = dateFromKey((mx.rows[0] as unknown[])[0]);
+      if (latest) period = resolvePeriod(question, latest);
+      if (period) facts.push(`Resolved period: "${period.phrase}" = ${period.label}, the ${period.reason}. State this once, in the headline or the first bullet, with its reason.`);
+    } catch { /* non-fatal */ }
+    try {
+      const entity = /dim_client|client_key|sla_tier/i.test(finalSql) ? { table: "dim_client", col: "sla_tier", noun: "clients" }
+        : /dim_counterparty|counterparty_key|reliability_tier/i.test(finalSql) ? { table: "dim_counterparty", col: "reliability_tier", noun: "counterparties" } : null;
+      if (entity) {
+        const pop = await executeSQL(`SELECT ${entity.col} AS t, count(*) AS n FROM harborline.${entity.table} GROUP BY 1 ORDER BY 1`);
+        const per = pop.rows.map((r) => [String((r as unknown[])[0]), toN((r as unknown[])[1])] as const);
+        const total = per.reduce((a, [, n]) => a + n, 0);
+        populations = [total, ...per.map(([, n]) => n)];
+        facts.push(`Population facts: Harborline has ${total} ${entity.noun} in total (${per.map(([t, n]) => `${n} ${t}`).join(", ")}); this result has ${execResult.row_count} rows. Write "all N" only if N is one of these full-population sizes.`);
+      }
+    } catch { /* non-fatal */ }
+  }
+
   // Step 3: Narrate (non-fatal)
+  let title = "";
   let headline = "";
   let narrative = "";
+  let bullets: string[] = [];
   let narrateTimeMs = 0;
   let scopeInfo: { first_violations: string[]; regenerated: boolean; dropped: string[] } | null = null;
   try {
     const t = Date.now();
+    const docsForNarrator = [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)];
     const n = await narrate({
       question,
       metric_used: sqlResult.metric_used ?? null,
@@ -199,36 +259,56 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
       row_count: execResult.row_count,
       truncated: execResult.truncated,
       sql: finalSql,
-      policies: [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)],
+      facts,
+      policies: docsForNarrator,
     }, DEFAULT_TENANT);
+    title = n.title ?? "";
     headline = n.headline;
     narrative = n.narrative;
+    bullets = n.bullets ?? [];
     let tin = n.usage?.input_tokens ?? 0, tout = n.usage?.output_tokens ?? 0;
     // D-049 scope check (harborline only): narrate -> check -> regenerate ONCE without policy chunks -> check -> drop the flagged sentences
-    if (SCOPE_CHECK_TENANTS.has(DEFAULT_TENANT)) {
-      const allowedMoney = moneyContext(execResult.columns, execResult.rows as unknown[][]).allowed;
-      const first = checkScope(`${headline} ${narrative}`, finalSql, allowedMoney);
+    // D-050: the same check now also covers the narrator accuracy rules (custody wording, marketing/comparison claims, "all N", percentages vs source text, unrequested credits)
+    if (harbor) {
+      const cells = execResult.rows as unknown[][];
+      const allowedMoney = moneyContext(execResult.columns, cells).allowed;
+      const numCells = cells.flatMap((r) => r.map((v) => (typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : NaN))).filter((x) => isFinite(x));
+      const docPct = (docs: { text: string }[]) => docs.flatMap((d) => pctFigures(d.text));
+      const allowedCounts = [...numCells.filter(Number.isInteger).map(Math.abs), ...countContext(execResult.columns, cells).allowed, ...docsForNarrator.flatMap((d) => countFigures(d.text)), execResult.row_count, ...(populations ?? [])];
+      const ctx: CheckContext = { question, rowCount: execResult.row_count, populations, allowedPct: { data: numCells, docs: docPct(docsForNarrator) }, allowedCounts };
+      const textOf = (x: { title?: string; headline: string; bullets: string[]; narrative: string }) => [x.title, x.headline, x.bullets.length ? x.bullets.map(stripBold).join(" ") : x.narrative].filter(Boolean).join(" ");
+      const first = checkScope(textOf({ title, headline, bullets, narrative }), finalSql, allowedMoney, ctx);
       if (!first.ok) {
-        scopeInfo = { first_violations: [...(first.windowBad ? ["window: " + first.windowClaims.join(", ")] : []), ...first.scopeViol, ...(first.moneyBad.length ? ["money: " + first.moneyBad.join(", ")] : [])], regenerated: true, dropped: [] };
+        scopeInfo = { first_violations: [...(first.windowBad ? ["window: " + first.windowClaims.join(", ")] : []), ...first.scopeViol, ...(first.moneyBad.length ? ["money: " + first.moneyBad.join(", ")] : []), ...first.claimBad], regenerated: true, dropped: [] };
+        const policyFree = first.windowBad || first.scopeViol.length > 0;
         try {
           const n2 = await narrate({
             question, metric_used: sqlResult.metric_used ?? null, sentiment: sqlResult.sentiment ?? null, columns: execResult.columns, rows: execResult.rows,
-            row_count: execResult.row_count, truncated: execResult.truncated, sql: finalSql,
-            policies: first.windowBad || first.scopeViol.length ? [] : [...toNarratorDocs(retrievalResp.results), ...toNarratorDocs(enriched)], // no policy chunks when the scope check failed; a money-only failure keeps them
+            row_count: execResult.row_count, truncated: execResult.truncated, sql: finalSql, facts,
+            policies: policyFree ? [] : docsForNarrator, // no policy chunks when the scope check failed; a money-only or claim-only failure keeps them
           }, DEFAULT_TENANT);
           tin += n2.usage?.input_tokens ?? 0; tout += n2.usage?.output_tokens ?? 0;
-          headline = n2.headline; narrative = n2.narrative;
+          title = n2.title ?? title; headline = n2.headline; narrative = n2.narrative; bullets = n2.bullets ?? [];
         } catch { /* keep the first narration; the drop step below still applies */ }
-        if (!checkScope(`${headline} ${narrative}`, finalSql, allowedMoney).ok) {
-          const nd = dropFlaggedSentences(narrative, finalSql, allowedMoney), hd = dropFlaggedSentences(headline, finalSql, allowedMoney);
-          narrative = nd.text; scopeInfo.dropped = [...nd.dropped, ...hd.dropped];
-          if (hd.dropped.length) headline = hd.text || (nd.text.split(/(?<=[.!?])\s/)[0] ?? "").slice(0, 90);
+        if (!checkScope(textOf({ title, headline, bullets, narrative }), finalSql, allowedMoney, ctx).ok) {
+          const drop = (x: string) => dropFlaggedSentences(x, finalSql, allowedMoney, ctx);
+          const hd = drop(headline);
+          const kept = bullets.map(drop);
+          scopeInfo.dropped = [...hd.dropped, ...kept.flatMap((k) => k.dropped)];
+          bullets = kept.map((k) => k.text).filter(Boolean);
+          narrative = bullets.length ? bullets.map(stripBold).join(" ") : drop(narrative).text;
+          if (hd.dropped.length) headline = hd.text || (narrative.split(/(?<=[.!?])\s/)[0] ?? "").slice(0, 90);
+          if (!checkScope(title, finalSql, allowedMoney, ctx).ok) title = "";
         }
       }
     }
     narrateTimeMs = Date.now() - t;
     tc.narration_tokens_in = tin; tc.narration_tokens_out = tout;
   } catch { /* narrator failure is non-fatal */ }
+  if (harbor) {
+    title = fixAcronyms(period ? stripPeriodWords(title.trim()) : title.trim()) || titleFromQuestion(question);
+    if (period && !title.includes(period.short)) title = `${title} — ${period.short}`;
+  }
   tc.narrate_ms = narrateTimeMs; tc.rows_returned = execResult.row_count; tc.success = true;
 
   return NextResponse.json({
@@ -238,6 +318,10 @@ async function handle(req: NextRequest, t_start: number, tc: Partial<TraceData> 
     sentiment: sqlResult.sentiment ?? null,
     tables_referenced: sqlResult.tables_referenced ?? [],
     reasoning: sqlResult.reasoning ?? null,
+    title: harbor ? title : undefined,
+    bullets: harbor ? bullets : undefined,
+    period: period ?? undefined,
+    overrides: overrides.length ? overrides : undefined,
     headline,
     narrative,
     scope_check: scopeInfo,

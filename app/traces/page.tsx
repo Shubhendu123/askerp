@@ -1,9 +1,10 @@
 import AppShell from "@/components/shell/AppShell";
 import { executeSQL } from "@/lib/db";
+import { getActiveTenantConfig } from "@/lib/tenants";
 
 // D-043: read-only trace view. No auth (consistent with the demo; documented gap in the ADR).
 export const dynamic = "force-dynamic";
-export const metadata = { title: "AskERP — Traces" };
+export function generateMetadata() { return { title: `${getActiveTenantConfig().productName} — Traces` }; }
 
 type Row = Record<string, unknown>;
 
@@ -49,7 +50,9 @@ export default async function TracesPage() {
   ] : [];
 
   const th = "text-left text-xs font-medium px-3 py-2";
-  const GRID = "9rem minmax(12rem,1fr) 4rem 9rem 8rem 4rem 4rem 6rem 6rem"; // shared by header and rows so columns align
+  // D-050: the 4rem Tenant column overlapped "harborline" and the Outcome column. Harborline gets a wider, truncating Tenant column; other tenants keep the original grid.
+  const harbor = getActiveTenantConfig().id === "harborline";
+  const GRID = harbor ? "11rem minmax(12rem,1fr) 7rem 7rem 8rem 4rem 4rem 6rem 6rem" : "9rem minmax(12rem,1fr) 4rem 9rem 8rem 4rem 4rem 6rem 6rem"; // shared by header and rows so columns align
   const COLS = ["Time (UTC)", "Question", "Tenant", "Outcome", "Error type", "Retries", "Rows", "Total", "Cost"];
   const td = "px-3 py-2 text-sm align-top";
   return (
@@ -57,6 +60,7 @@ export default async function TracesPage() {
       <div className="p-6 max-w-6xl" style={{ color: "var(--text-primary)" }}>
         <h1 className="text-xl font-semibold mb-1">Request traces</h1>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>Today = UTC day. Most recent 50 requests below; click a row for SQL, chunks and stage timings.</p>
+        {harbor && <p className="text-xs mb-4 -mt-2 font-medium" style={{ color: "var(--accent)" }}>Live: every request is logged.</p>}
         {err && <div className="text-sm p-3 rounded" style={{ background: "var(--sentiment-negative-bg)", color: "var(--sentiment-negative)" }}>Could not read ops.request_traces: {err}</div>}
         {summary && (
           <div className="rounded-lg p-4 mb-3 flex items-baseline gap-4" style={{ background: failedN ? "var(--sentiment-negative-bg)" : "var(--sentiment-positive-bg)", border: "1px solid var(--border)" }}>
@@ -92,7 +96,8 @@ export default async function TracesPage() {
               const outcomeColor = ok ? "var(--sentiment-positive)" : declined ? "var(--text-secondary)" : "var(--sentiment-negative)";
               let chunks: string[] = [];
               try { chunks = JSON.parse(String(r.chunk_ids ?? "[]")); } catch { /* ignore */ }
-              const ts = r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at);
+              const ca = r.created_at as unknown; // local DuckDB returns a timestamp object ({micros}); MotherDuck returns a Date
+              const ts = ca instanceof Date ? ca.toISOString() : ca && typeof ca === "object" && "micros" in ca ? new Date(Number((ca as { micros: bigint }).micros) / 1000).toISOString() : String(ca);
               const qtext = String(r.question ?? "");
               return (
                 <div key={String(r.trace_id)} style={{ borderTop: "1px solid var(--border)" }}>
@@ -100,7 +105,7 @@ export default async function TracesPage() {
                         <summary className="grid cursor-pointer list-none" style={{ gridTemplateColumns: GRID }}>
                           <span className={td}>{ts.replace("T", " ").slice(0, 19)}</span>
                           <span className={td}>{qtext.length > 70 ? qtext.slice(0, 70) + "…" : qtext}</span>
-                          <span className={td}>{String(r.tenant)}</span>
+                          <span className={`${td} ${harbor ? "truncate" : ""}`}>{String(r.tenant)}</span>
                           <span className={td} style={{ color: outcomeColor }}>{outcome}</span>
                           <span className={td}>{r.error_type ? String(r.error_type) : "–"}</span>
                           <span className={td}>{String(r.retry_count)}</span>

@@ -660,6 +660,31 @@ export async function enrichDocuments(question: string, columns: string[], rows:
   return best.map((i) => toResult(index.chunks[i], 0, true));
 }
 
+/**
+ * D-050: a client agreement that overrides the standard SLA settlement target (POL-001 §2) for a client that appears in the result rows
+ * (e.g. Eastgate, CA-001 §2: 98.5% instead of 99.0%). Deterministic: keyed on the client names in the rows and the agreement's own
+ * `overrides` front-matter, not on retrieval ranking.
+ */
+export interface TargetOverride { client: string; target: number; citation: string; supersedes: string; chunk: RetrievalResult; policyChunk: RetrievalResult | null }
+export async function findTargetOverrides(columns: string[], rows: unknown[][], tenant: string): Promise<TargetOverride[]> {
+  await ensureInit();
+  const index = _tenants!.get(tenant);
+  if (!index || !rows.length) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const out: TargetOverride[] = [];
+  for (const c of index.chunks) {
+    const m = c.policy;
+    if (!m || m.doc_type !== "client_agreement" || !m.overrides.includes("POL-001 §2") || !inForce(m, today)) continue;
+    if (!/settlement[- ]rate commitment/i.test(c.text) || !rowsMentionEntities(columns, rows, m.entities)) continue;
+    const t = /commitment[\s\S]*?\*\*(\d+(?:\.\d+)?)%\*\*/i.exec(c.text);
+    const client = String((m.entities as Record<string, unknown>)?.client ?? "");
+    if (!t || !client) continue;
+    const pol = index.chunks.find((x) => x.id === `${tenant}:POL-001#2`);
+    out.push({ client, target: parseFloat(t[1]), citation: m.citation, supersedes: "POL-001 §2", chunk: toResult(c, 0, true), policyChunk: pol ? toResult(pol, 0, true) : null });
+  }
+  return out;
+}
+
 // ── Test path (benchmark, D-036) ───────────────────────────────────────────────
 // Exposes each ranker separately. Production default path is retrieve() below
 // (rrf) and is unchanged.

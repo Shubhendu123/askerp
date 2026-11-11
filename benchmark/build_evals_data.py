@@ -1,7 +1,7 @@
 """D-049: build evals/evals_data.json for the /evals page. EVERY number is derived from committed files - nothing is typed in.
   headline   <- benchmark/runs_harborline/harborline_d048_run{1,2,3}_*.jsonl (the 3 rrf/k=10 runs on the fixed code; scored records)
   ablation   <- the mode-ablation table in DECISIONS.md (D-047 section)
-  stability  <- benchmark/stability_d049.json (D-049 step-6 runs; verdicts computed by benchmark/stability_harborline.py)
+  stability  <- benchmark/stability_d049.json overlaid with stability_d049_platinum_rerun.json and stability_d049_penalties_rerun.json (latest re-runs; before -> after where the verdict changed)
   problems   <- the "Problems found and fixed" table in DECISIONS.md (D-049 section); every ADR id is checked to exist
   mro        <- benchmark/mro_retrieval_check_d049.json (retrieval-only MRO S02/M08 vs the D-044 baseline)
 usage (repo root): python3 benchmark/build_evals_data.py"""
@@ -63,13 +63,48 @@ def problems():
     return out
 
 
+def _srow(r):
+    return {"question": r["question"], "verdict": r["verdict"], "rows_same": r["same_rows"], "headline_same": r["same_headline_text"], "outcomes": r.get("outcomes"),
+            "flags": r["flags"], "http_500_non_refusal": r.get("http_500_non_refusal", 0), "n_runs": len(r["runs"]) if "runs" in r else 3}
+
+
+def _why(r):
+    """Human reason for a non-STABLE verdict, derived from the committed flags - nothing typed per question."""
+    unit = [f.split(":", 1)[1] for f in r["flags"] if f.startswith("unit:")]
+    if unit:
+        return f"{unit[0]} unit error", "code check"
+    if not r["same_rows"] and r.get("same_rows_as_set"):
+        return "row order differed between runs", "deterministic ORDER BY"
+    if not r["same_rows"]:
+        return "result rows differed between runs", "code fix"
+    return ", ".join(r["flags"]) or r["verdict"], "code fix"
+
+
 def stability():
+    """D-050: the base runs (stability_d049.json) overlaid with the latest re-runs; a question whose verdict changed carries before -> after."""
     p = "benchmark/stability_d049.json"
     if not os.path.exists(p):
         return None
-    res = json.load(open(p))
-    return [{"question": r["question"], "verdict": r["verdict"], "rows_same": r["same_rows"], "headline_same": r["same_headline_text"], "outcomes": r.get("outcomes"),
-             "flags": r["flags"], "http_500_non_refusal": r.get("http_500_non_refusal", 0), "n_runs": len(r["runs"])} for r in res]
+    base = json.load(open(p))
+    reruns = {}
+    for f in ("benchmark/stability_d049_platinum_rerun.json", "benchmark/stability_d049_penalties_rerun.json"):
+        if os.path.exists(f):
+            for r in json.load(open(f)):
+                reruns[r["question"]] = (r, os.path.basename(f))
+    out = []
+    for b in base:
+        if b["question"] in reruns:
+            new, fname = reruns[b["question"]]
+            row = _srow(new)
+            row["source"] = fname
+            if b["verdict"] != new["verdict"]:
+                why, fix = _why(b)
+                row["before"] = {"verdict": b["verdict"], "why": why, "fix": fix}
+        else:
+            row = _srow(b)
+            row["source"] = "stability_d049.json"
+        out.append(row)
+    return out
 
 
 def mro():

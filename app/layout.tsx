@@ -6,18 +6,19 @@ import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
-export const metadata: Metadata = {
-  title: "AskERP — Conversational Analytics",
-  description: getActiveTenantConfig().metaDescription,
-};
+export function generateMetadata(): Metadata {
+  const t = getActiveTenantConfig();
+  return { title: `${t.productName} — Conversational Analytics`, description: t.metaDescription };
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const theme = getActiveTenantConfig().theme; // D-050: "default" renders exactly as before; "navy" is harborline's token override
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} data-theme={theme}>
       <body className={`${inter.className} antialiased`}>
         {children}
         <Analytics />

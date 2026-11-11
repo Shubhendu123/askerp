@@ -6,9 +6,15 @@ export function formatMoney(n: number): string {
   if (!Number.isFinite(n)) return String(n);
   const abs = Math.abs(n), sign = n < 0 ? "-" : "";
   const trim = (x: number) => x.toFixed(1).replace(/\.0$/, "");
-  if (abs >= 1e9) return `${sign}$${trim(abs / 1e9)}B`;
-  if (abs >= 1e6) return `${sign}$${trim(abs / 1e6)}M`;
-  if (abs >= 1e3) return `${sign}$${trim(abs / 1e3)}K`;
+  // D-050: the largest unit that keeps the number under 1,000 - and rounding must not push it back to 1000 ($999,950 -> $1M, not $1000K).
+  const units: [number, string][] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  for (let i = 0; i < units.length; i++) {
+    const [div, sym] = units[i];
+    if (abs < div) continue;
+    if (Number(trim(abs / div)) >= 1000 && i > 0) return `${sign}$${trim(abs / units[i - 1][0])}${units[i - 1][1]}`;
+    return `${sign}$${trim(abs / div)}${sym}`;
+  }
+  if (Number(trim(abs)) >= 1000) return `${sign}$1K`; // 999.97 rounds to 1000
   return `${sign}$${trim(abs)}`;
 }
 
@@ -63,8 +69,8 @@ export function moneyContext(columns: string[], rows: unknown[][]): MoneyContext
   return { allowed, lines };
 }
 
-const FIG = /\$\s?(\d[\d,]*\.?\d*)\s?(K|M|B|bn|thousand|million|billion)?\b|(\d[\d,]*\.?\d*)\s*(thousand|million|billion)\s+dollars/gi;
-const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
+const FIG = /\$\s?(\d[\d,]*\.?\d*)\s?(K|M|B|T|bn|thousand|million|billion|trillion)?\b|(\d[\d,]*\.?\d*)\s*(thousand|million|billion|trillion)\s+dollars/gi;
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9, t: 1e12, trillion: 1e12 };
 
 /** Money figures in `text` that match no allowed value (within 6% - rounding - so a x1000 mis-scale is always caught). */
 export function moneyFigureProblems(text: string, allowed: number[]): string[] {

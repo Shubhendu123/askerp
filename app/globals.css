@@ -70,6 +70,31 @@
   }
 }
 
+/* D-050: Harborline navy/slate theme. Only token overrides - every component already reads these variables, so the
+   default (MRO / Northwind) theme above is untouched. The brand mark is an original navy monogram (see TopHeader). */
+@layer base {
+  html[data-theme="navy"] {
+    --bg-page: #F4F6F9;
+    --bg-surface: #FFFFFF;
+    --bg-subtle: #EBEFF4;
+    --brand: #14284B;
+    --accent: #1F3A66;
+    --accent-hover: #162C4F;
+    --accent-subtle: #E4EAF3;
+    --text-primary: #16202E;
+    --text-secondary: #556070;
+    --text-tertiary: #8793A3;
+    --border: #D9E0E9;
+    --sentiment-positive: #2F6F57;
+    --sentiment-positive-bg: #E5F0EB;
+    --sentiment-negative: #B03A3A;
+    --sentiment-negative-bg: #F8EAEA;
+    --sentiment-neutral: #556070;
+    --accent-glow: rgba(31, 58, 102, 0.10);
+    --accent-glow-strong: rgba(31, 58, 102, 0.22);
+  }
+}
+
 @layer base {
   * { @apply border-border; }
   body {

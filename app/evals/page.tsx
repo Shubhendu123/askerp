@@ -3,11 +3,12 @@ import data from "@/evals/evals_data.json";
 
 // D-049: every figure below is rendered from evals/evals_data.json, which benchmark/build_evals_data.py derives from
 // committed result files (benchmark/runs_harborline/*.jsonl, benchmark/stability_d049.json) and DECISIONS.md. Nothing is typed in here.
-export const metadata = { title: "AskERP — Evals" };
+import { getActiveTenantConfig } from "@/lib/tenants";
+export function generateMetadata() { return { title: `${getActiveTenantConfig().productName} — Evals` }; }
 
 type Tier = { mean: number; min: number; max: number; n_questions: number };
 type AblationRow = Record<string, string | number>;
-type StabilityRow = { question: string; verdict: string; rows_same: boolean; headline_same: boolean; outcomes: string[] | null; flags: string[]; http_500_non_refusal: number; n_runs: number };
+type StabilityRow = { question: string; verdict: string; rows_same: boolean; headline_same: boolean; outcomes: string[] | null; flags: string[]; http_500_non_refusal: number; n_runs: number; before?: { verdict: string; why: string; fix: string } };
 
 const f2 = (x: number) => x.toFixed(2);
 const range = (t: { mean: number; min: number; max: number }) => `${f2(t.mean)} [${f2(t.min)}–${f2(t.max)}]`;
@@ -36,10 +37,11 @@ export default function EvalsPage() {
         <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
           Rendered from committed result files and DECISIONS.md. A-score is 0–3 per question, scored against ground-truth SQL that was executed before any model run.
         </p>
+        <p className="text-xs mb-6 -mt-4" style={{ color: "var(--text-tertiary)" }}>Offline snapshot from committed benchmark runs; updates on each benchmark run.</p>
 
         {/* Headline */}
         <section className="mb-8">
-          <h2 className="text-sm font-semibold mb-2">Headline A-score ({h.n_runs} runs, rrf / k=10)</h2>
+          <h2 className="text-sm font-semibold mb-2">Headline A-score ({h.n_runs} runs, rrf / k=10) <span className="font-normal text-xs" style={{ color: "var(--text-tertiary)" }}>— measured before D-049</span></h2>
           <div className="grid gap-3 sm:grid-cols-3 mb-3">
             <div className="p-4" style={card}>
               <div className="text-3xl font-semibold">{f2(h.A_all.mean)}</div>
@@ -107,7 +109,7 @@ export default function EvalsPage() {
             <div style={card} className="overflow-x-auto">
               <table className="w-full">
                 <thead><tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                  <th className={th}>Question</th><th className={th}>Runs</th><th className={th}>Same rows</th><th className={th}>Outcomes</th><th className={th}>Flags</th><th className={th}>Verdict</th>
+                  <th className={th}>Question</th><th className={th}>Runs</th><th className={th}>Same rows</th><th className={th}>Outcomes</th><th className={th}>Flags</th><th className={th}>Verdict</th><th className={th}>Change</th>
                 </tr></thead>
                 <tbody>
                   {stab.map((r) => (
@@ -118,6 +120,14 @@ export default function EvalsPage() {
                       <td className={td}>{(r.outcomes ?? []).join(" · ")}</td>
                       <td className={td}>{r.flags.length ? r.flags.join("; ") : "none"}</td>
                       <td className={td}><span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={verdictStyle(r.verdict)}>{r.verdict}</span></td>
+                      <td className={td} style={{ minWidth: "14rem" }}>
+                        {r.before ? (
+                          <span className="text-xs">
+                            <span style={{ color: "var(--sentiment-negative)", fontWeight: 500 }}>{r.before.verdict}</span> ({r.before.why}) →{" "}
+                            <span style={{ color: "var(--sentiment-positive)", fontWeight: 500 }}>{r.verdict}</span> after {r.before.fix}
+                          </span>
+                        ) : <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>–</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

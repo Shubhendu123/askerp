@@ -1,0 +1,1795 @@
+[
+ {
+  "question": "What are our total assets under custody?",
+  "same_rows": true,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Harborline holds **$712.2B** in assets under custody as of the latest position date.",
+    "narrative": "Assets under custody reached $712.2B as of the most recent business day in the dataset.",
+    "sql": "SELECT ROUND(SUM(market_value_usd), 2) AS auc_usd FROM harborline.pos_daily_position WHERE position_date_key = (SELECT MAX(position_date_key) FROM harborline.pos_daily_position)\nLIMIT 1000",
+    "rows": [
+     [
+      712173778392.28
+     ]
+    ],
+    "row_count": 1,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "recent"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "money: $60B",
+      "generic 'all <entities>' claim - the data does not show the full population"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "This scale qualifies the vast majority of holdings for the lowest custody fee tier of 0.45 bps (POL-010 \u00a73).",
+      "The figure represents the total securities and cash positions held on behalf of all clients at that snapshot date."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Harborline holds $712.2B in assets under custody as of the latest position date.",
+    "narrative": "Assets under custody stand at $712.2B as of the most recent position date in the data.",
+    "sql": "SELECT ROUND(SUM(market_value_usd), 2) AS auc_usd FROM harborline.pos_daily_position WHERE position_date_key = (SELECT MAX(position_date_key) FROM harborline.pos_daily_position)\nLIMIT 1000",
+    "rows": [
+     [
+      712173778392.28
+     ]
+    ],
+    "row_count": 1,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "recent"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "tier language but SQL is not per counterparty/client",
+      "money: $60B"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "This represents the full scope of securities and assets Harborline holds in custody across all clients and markets."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Harborline holds $712.2B in assets under custody as of the latest position date.",
+    "narrative": "Assets under custody stand at $712.2B as of the most recent position snapshot in the data.",
+    "sql": "SELECT ROUND(SUM(market_value_usd), 2) FROM harborline.pos_daily_position WHERE position_date_key = (SELECT MAX(position_date_key) FROM harborline.pos_daily_position)\nLIMIT 1000",
+    "rows": [
+     [
+      712173778392.28
+     ]
+    ],
+    "row_count": 1,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "recent"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "tier language but SQL is not per counterparty/client",
+      "money: $60B",
+      "generic 'all <entities>' claim - the data does not show the full population"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "This figure represents the full market value of all securities held in custody across Harborline's client base."
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "question": "Which counterparties' settlement fails cost us the most in penalties?",
+  "same_rows": true,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Top 2 counterparties drove $416K of $1.4M in total penalties.",
+    "narrative": "All 60 counterparties in the dataset incurred penalties totaling $1.4M across all periods in the data, indicating settlement fails are distributed across the counterparty base.",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_key, cp.counterparty_name, cp.reliability_tier ORDER BY penalties_usd DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "window: july 2026",
+      "percentage 30% matches neither the result data nor any supplied document"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "**Hawick Dunn Securities** (tier D) and **Kendal Prowse Securities** (tier D) incurred **$211.2K** and **$204.8K** respectively, accounting for 30% of all penalties across all 60 counterparties.",
+      "Tier D counterparties dominate the penalty cost: the top 7 offenders (all rated D or C) total **$523.1K**, nearly 37% of the portfolio penalty burden."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Top 4 counterparties account for **$612K** of **$1.4M** total penalties across all 60 counterparties.",
+    "narrative": "The top 4 penalized counterparties are all in the D reliability tier; their $612K in penalties suggests settlement failure rates concentrated among lower-rated counterparties. Across all 60 counterparties and all periods in the data, settlement failures generated $1.4M in penalties, indicating a material operational and financial cost.",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_key, cp.counterparty_name, cp.reliability_tier ORDER BY penalties_usd DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "window: july 2026"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "**Hawick Dunn Securities** (tier D) and **Kendal Prowse Securities** (tier D) together incurred **$416K** in penalties, nearly 30% of the company-wide total."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Top 4 counterparties account for $612K of $1.4M in penalties across all 60 counterparties.",
+    "narrative": "Hawick Dunn Securities leads with $211.2K, followed by Kendal Prowse Securities at $204.8K; both are tier D (INC-2026-019 \u00a73, INC-2026-012 \u00a73). Hawick Dunn's fails are operational, tied to missing settlement instructions post-migration and expected to resolve once instructions are re-established (INC-2026-019 \u00a73).",
+    "sql": "SELECT cp.counterparty_name, cp.reliability_tier, ROUND(SUM(p.penalty_amount_usd), 2) AS total_penalties_usd FROM harborline.stl_fail_penalty p JOIN harborline.dim_counterparty cp ON cp.counterparty_key = p.counterparty_key GROUP BY cp.counterparty_key, cp.counterparty_name, cp.reliability_tier ORDER BY 3 DESC LIMIT 100",
+    "rows": [
+     [
+      "Hawick Dunn Securities",
+      "D",
+      211230.78
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      204795.45
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      107072.32
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      88940.35
+     ],
+     [
+      "Glossop Reid Bank",
+      "C",
+      79662.47
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      72744.54
+     ],
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      70886.72
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      50989.55
+     ],
+     [
+      "Cheswick Orme Bank",
+      "C",
+      47145.6
+     ],
+     [
+      "Kirkwall Rowe Securities",
+      "B",
+      45085.84
+     ],
+     [
+      "Bexley Nunn Securities",
+      "C",
+      41804.87
+     ],
+     [
+      "Ulverston Glenn Clearing",
+      "C",
+      38162.34
+     ],
+     [
+      "Dalry Fenn Clearing",
+      "C",
+      37773.94
+     ],
+     [
+      "Farnley Shaw Securities",
+      "C",
+      36685.14
+     ],
+     [
+      "Rothbury Ames Bank",
+      "C",
+      32698.95
+     ],
+     [
+      "Tavistock Rye Securities",
+      "C",
+      21584.81
+     ],
+     [
+      "Selwyn Marsh Securities",
+      "C",
+      19507.29
+     ],
+     [
+      "Gilmour Pike Securities",
+      "B",
+      19253.89
+     ],
+     [
+      "Wexford Hart Bank",
+      "C",
+      16170.29
+     ],
+     [
+      "Jarrow Tate Securities",
+      "B",
+      14059.35
+     ],
+     [
+      "Ambleside Kerr Trust",
+      "C",
+      12713.23
+     ],
+     [
+      "Oakhurst Lee Clearing",
+      "B",
+      11957.46
+     ],
+     [
+      "Eastwick Lane Securities",
+      "B",
+      9195.99
+     ],
+     [
+      "Elstree Gale Clearing",
+      "C",
+      9191.02
+     ],
+     [
+      "Vance Holloway Bank",
+      "A",
+      8001.43
+     ],
+     [
+      "Whitlock Frost Securities",
+      "B",
+      7462.69
+     ],
+     [
+      "Fenwick Drake Securities",
+      "B",
+      6756.78
+     ],
+     [
+      "Prestwick Hume Securities",
+      "B",
+      6115.95
+     ],
+     [
+      "Lockhart Dyer Securities",
+      "A",
+      5774.91
+     ],
+     [
+      "Marchmont Shaw Trust",
+      "A",
+      5742.81
+     ],
+     [
+      "Isherwood Fay Securities",
+      "B",
+      5210.15
+     ],
+     [
+      "Thackeray Webb Securities",
+      "A",
+      5194.3
+     ],
+     [
+      "Overton Blythe Bank",
+      "A",
+      5145.75
+     ],
+     [
+      "Delaney Voss Securities",
+      "B",
+      5144.74
+     ],
+     [
+      "Kensington Ward Clearing",
+      "A",
+      4730
+     ],
+     [
+      "Beaumont Ryle Bank",
+      "B",
+      4451.63
+     ],
+     [
+      "Carrow Nash Clearing",
+      "B",
+      4418.95
+     ],
+     [
+      "Mortlake Dean Securities",
+      "B",
+      4361.15
+     ],
+     [
+      "Sterling Hale Securities",
+      "A",
+      4264.47
+     ],
+     [
+      "Dunbar Pryce Securities",
+      "A",
+      3864.06
+     ],
+     [
+      "Yardley Penn Bank",
+      "B",
+      3716.7
+     ],
+     [
+      "Newbury Orr Bank",
+      "B",
+      3602.11
+     ],
+     [
+      "Jessop Crane Bank",
+      "A",
+      3485.93
+     ],
+     [
+      "Garrick Moss Bank",
+      "A",
+      3463.03
+     ],
+     [
+      "Holloway Reed Securities",
+      "A",
+      3332.95
+     ],
+     [
+      "Alder & Finch Securities",
+      "A",
+      3329.77
+     ],
+     [
+      "Norwood Teague Bank",
+      "A",
+      3301.94
+     ],
+     [
+      "Harcourt Bell Securities",
+      "B",
+      2965.11
+     ],
+     [
+      "Ingram Vale Bank",
+      "A",
+      2545.81
+     ],
+     [
+      "Radcliffe Moor Bank",
+      "A",
+      2452.91
+     ],
+     [
+      "Queensferry Pitt Bank",
+      "B",
+      2434.16
+     ],
+     [
+      "Pemberton Gray Securities",
+      "A",
+      2431.97
+     ],
+     [
+      "Lymington Cray Bank",
+      "B",
+      2046.38
+     ],
+     [
+      "Brandt Wilkes Bank",
+      "A",
+      1532.67
+     ],
+     [
+      "Everly Stone Securities",
+      "A",
+      1457.59
+     ],
+     [
+      "Calloway Hart Trust",
+      "A",
+      1074.9
+     ],
+     [
+      "Ainsworth Cole Securities",
+      "B",
+      985.42
+     ],
+     [
+      "Quentin Ashby Bank",
+      "A",
+      854.95
+     ],
+     [
+      "Underhill Cross Clearing",
+      "A",
+      444.59
+     ],
+     [
+      "Falkirk Lowe Trust",
+      "A",
+      247.84
+     ]
+    ],
+    "row_count": 60,
+    "retries": 0,
+    "flags": {
+     "window_claims": [],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "percentage 30% matches neither the result data nor any supplied document"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Kendal Prowse has chronic fails driven by inventory shortfall; tier D restrictions and a 90-day remediation plan (ended July 2026) produced no improvement; a second failed review would trigger recommendation that clients use alternative counterparties (INC-2026-012 \u00a73, POL-007 \u00a74)."
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "question": "Which Platinum clients missed their SLA settlement target last month?",
+  "same_rows": false,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "UNSTABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All 8 Platinum clients fell short of settlement targets in September 2026, latest complete month.",
+    "narrative": "September 2026 (latest complete month in the data): all 8 Platinum clients missed their settlement-rate SLA, with rates ranging from 93.4% to 98.3% against targets of 99.0% or 98.5%. Eastgate Capital Partners missed hardest at 93.4%, 5.1 percentage points below its negotiated 98.5% target (CA-001 \u00a72), instead of the standard 99.0% (POL-001 \u00a72); the other 7 clients fell 0.7 to 2.1 percentage points short of 99.0%.",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE c.sla_tier = 'PLATINUM' AND i.settlement_status IN ('SETTLED', 'FAILED') AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name ASC\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      98.5
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "mentions SLA credits although the question did not ask"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Across the 8 clients, **11,211** settled instructions were processed in September; breaches trigger SLA credits of up to 5% of monthly custody fee per breached commitment, capped at 20% per client (POL-001 \u00a73)."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All **8 Platinum clients** fell below their September settlement targets, ranging from **93.4%** to **98.3%**.",
+    "narrative": "September 2026 (latest complete month in the data): all 8 Platinum clients processed 11,211 instructions but each failed to meet its monthly settlement-rate target (POL-001 \u00a72). Eastgate Capital Partners achieved 93.4% against its 98.5% target (CA-001 \u00a72), overriding the standard 99.0% (POL-001 \u00a72); the remaining 7 clients each achieved between 96.8% and 98.3% against the standard 99.0% target.",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct, 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) >= 99.0 AS met_target FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND c.sla_tier = 'PLATINUM' AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      98.5,
+      false
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99,
+      false
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99,
+      false
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99,
+      false
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99,
+      false
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99,
+      false
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99,
+      false
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99,
+      false
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "mentions SLA credits although the question did not ask"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Each breach entitles the client to an SLA credit of 5% of that month's custody fee, capped at 20% per month (POL-001 \u00a73), unless the breach was caused by counterparty failure, market outage, or late instruction (POL-003)."
+     ]
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All 8 PLATINUM clients fell short of their September 2026 settlement targets, with rates ranging from 93.4% to 98.3%.",
+    "narrative": "September 2026 (latest complete month in the data): all 8 PLATINUM clients in the population failed to meet their monthly settlement-rate targets. Eastgate Capital Partners was lowest at 93.42% against its 98.5% target, while the other 7 ranged from 96.82% to 98.34% against their 99.0% target, across 11,211 total settlement instructions. Eastgate's target is 98.5% (CA-001 \u00a72), overriding the standard PLATINUM 99.0% (POL-001 \u00a72). This is a systemic settlement compliance issue affecting the entire PLATINUM tier in the measured period, suggesting potential operational or market constraints that impacted on-time settlement across all high-service-level clients.",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct, 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) >= 99.0 AS met_target FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND c.sla_tier = 'PLATINUM' AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      98.5,
+      false
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99,
+      false
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99,
+      false
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99,
+      false
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99,
+      false
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99,
+      false
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99,
+      false
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99,
+      false
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "mentions SLA credits although the question did not ask"
+     ],
+     "regenerated": true,
+     "dropped": [
+      "Each client is eligible for SLA credits up to 5% of monthly custody fees per breached commitment, capped at 20% monthly for PLATINUM tier (POL-001 \u00a73)."
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "question": "Which counterparties meet our tier-D criteria?",
+  "same_rows": true,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All **7 tier D counterparties** show fail rates of **12.3\u201313.6%** and average **6.5\u20137.4 days late**.",
+    "narrative": "All 7 counterparties assigned tier D exceed the 10.0% fail-rate threshold and the 4.0-day average lateness threshold (POL-007 \u00a72), triggering mandatory pre-matching, daily fail reports, and client notification (POL-007 \u00a74). Kendal Prowse Securities (12.43% fail rate, 9,375 instructions) and Hawick Dunn Securities (12.79%, 8,952 instructions) account for the largest settlement volumes; Kendal Prowse failed its first 90-day remediation review in July 2026 and faces recommendation to clients to use alternative counterparties if a second review fails (INC-2026-012 \u00a73). Hawick Dunn Securities is under active incident review for sustained instruction-missing and mismatched-instruction fails post-migration (INC-2026-019 \u00a71).",
+    "sql": "WITH latest AS (SELECT MAX(d.full_date) AS max_date FROM harborline.stl_trade_instruction i JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key), perf AS (SELECT cp.counterparty_name, cp.reliability_tier AS assigned_tier, COUNT(*) AS instructions, COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') AS failed_instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') / COUNT(*), 2) AS fail_rate_pct, ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status = 'FAILED'), 2) AS avg_days_failed FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp ON cp.counterparty_key = i.counterparty_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key CROSS JOIN latest l WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND d.full_date > l.max_date - INTERVAL 12 MONTH AND (i.fail_reason_code IS NULL OR i.fail_reason_code <> 'MARKET_RESTRICTION') GROUP BY cp.counterparty_name, cp.reliability_tier) SELECT counterparty_name, assigned_tier, instructions, failed_instructions, fail_rate_pct, avg_days_failed FROM perf WHERE fail_rate_pct > 10 AND avg_days_failed > 4 ORDER BY fail_rate_pct DESC\nLIMIT 1000",
+    "rows": [
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      3286,
+      447,
+      13.6,
+      6.68
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      4034,
+      533,
+      13.21,
+      7.37
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      5621,
+      728,
+      12.95,
+      6.45
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      3395,
+      438,
+      12.9,
+      6.53
+     ],
+     [
+      "Hawick Dunn Securities",
+      "D",
+      8952,
+      1145,
+      12.79,
+      6.74
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      9375,
+      1165,
+      12.43,
+      6.75
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      2695,
+      331,
+      12.28,
+      6.93
+     ]
+    ],
+    "row_count": 7,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "july 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": null
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All 7 tier-D counterparties exceed 10% fail rate, averaging 12.8% failures over 12 months.",
+    "narrative": "All 7 counterparties assigned tier-D processed 37,358 instructions in the trailing 12 months, with fail rates spanning 12.3% to 13.6% and failed instructions resolved in 6.5 to 7.4 days on average. Tier-D assignment flags elevated operational risk; counterparties meeting both fail rate and resolution-time thresholds (>10% failures, >4 days to resolve) require monitoring or remediation discussions. Top 2 counterparties\u2014Jedburgh Colt Securities (13.6% fail rate, 447 failures) and Lyndhurst Boyd Trust (13.2% fail rate, 533 failures)\u2014account for 7,320 of 37,358 total instructions, concentrating risk exposure.",
+    "sql": "WITH latest AS (SELECT MAX(d.full_date) AS max_date FROM harborline.stl_trade_instruction i JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key), perf AS (SELECT cp.counterparty_name, cp.reliability_tier AS assigned_tier, COUNT(*) AS instructions, COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') AS failed_instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') / COUNT(*), 2) AS fail_rate_pct, ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status = 'FAILED'), 2) AS avg_days_failed FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp ON cp.counterparty_key = i.counterparty_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key CROSS JOIN latest l WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND d.full_date > l.max_date - INTERVAL 12 MONTH AND (i.fail_reason_code IS NULL OR i.fail_reason_code <> 'MARKET_RESTRICTION') GROUP BY cp.counterparty_name, cp.reliability_tier) SELECT counterparty_name, assigned_tier, instructions, failed_instructions, fail_rate_pct, avg_days_failed FROM perf WHERE fail_rate_pct > 10 AND avg_days_failed > 4 ORDER BY fail_rate_pct DESC\nLIMIT 1000",
+    "rows": [
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      3286,
+      447,
+      13.6,
+      6.68
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      4034,
+      533,
+      13.21,
+      7.37
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      5621,
+      728,
+      12.95,
+      6.45
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      3395,
+      438,
+      12.9,
+      6.53
+     ],
+     [
+      "Hawick Dunn Securities",
+      "D",
+      8952,
+      1145,
+      12.79,
+      6.74
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      9375,
+      1165,
+      12.43,
+      6.75
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      2695,
+      331,
+      12.28,
+      6.93
+     ]
+    ],
+    "row_count": 7,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "12 months",
+      "trailing"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": {
+     "first_violations": [
+      "SLA/client-tier language but SQL is not per client"
+     ],
+     "regenerated": true,
+     "dropped": []
+    }
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "All 7 tier-D counterparties exceed 10.0% fail rate; 2 approach 13.6% with elevated days late.",
+    "narrative": "All 7 counterparties assigned tier D show fail rates between 12.3% and 13.6%, well above the 10.0% threshold (POL-007 \u00a72), with average days failed ranging 6.45 to 7.37 days. Tier D status triggers mandatory pre-matching, daily fail reports to counterparty operations, client notification of elevated risk, and a 90-day remediation plan (POL-007 \u00a74); Kendal Prowse failed its July 2026 review and faces client routing recommendations if the second review fails (INC-2026-012 \u00a73). Jedburgh Colt Securities (13.6% fail rate, 447 failures of 3,286 instructions) and Lyndhurst Boyd Trust (13.21%, 533 failures of 4,034 instructions) present the highest operational risk among tier-D counterparties. Hawick Dunn Securities, a tier D counterparty, sustained COUNTERPARTY_INSTRUCTION_MISSING and MISMATCHED_INSTRUCTION fails post-migration (INC-2026-019 \u00a71), consistent with its 12.79% fail rate in this data.",
+    "sql": "WITH latest AS (SELECT MAX(d.full_date) AS max_date FROM harborline.stl_trade_instruction i JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key), perf AS (SELECT cp.counterparty_name, cp.reliability_tier AS assigned_tier, COUNT(*) AS instructions, COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') AS failed_instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.settlement_status = 'FAILED') / COUNT(*), 2) AS fail_rate_pct, ROUND(AVG(i.days_failed) FILTER (WHERE i.settlement_status = 'FAILED'), 2) AS avg_days_failed FROM harborline.stl_trade_instruction i JOIN harborline.dim_counterparty cp ON cp.counterparty_key = i.counterparty_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key CROSS JOIN latest l WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND d.full_date > l.max_date - INTERVAL 12 MONTH AND (i.fail_reason_code IS NULL OR i.fail_reason_code <> 'MARKET_RESTRICTION') GROUP BY cp.counterparty_name, cp.reliability_tier) SELECT counterparty_name, assigned_tier, instructions, failed_instructions, fail_rate_pct, avg_days_failed FROM perf WHERE fail_rate_pct > 10 AND avg_days_failed > 4 ORDER BY fail_rate_pct DESC\nLIMIT 1000",
+    "rows": [
+     [
+      "Jedburgh Colt Securities",
+      "D",
+      3286,
+      447,
+      13.6,
+      6.68
+     ],
+     [
+      "Lyndhurst Boyd Trust",
+      "D",
+      4034,
+      533,
+      13.21,
+      7.37
+     ],
+     [
+      "Ilkley Marr Trust",
+      "D",
+      5621,
+      728,
+      12.95,
+      6.45
+     ],
+     [
+      "Nantwich Strand Bank",
+      "D",
+      3395,
+      438,
+      12.9,
+      6.53
+     ],
+     [
+      "Hawick Dunn Securities",
+      "D",
+      8952,
+      1145,
+      12.79,
+      6.74
+     ],
+     [
+      "Kendal Prowse Securities",
+      "D",
+      9375,
+      1165,
+      12.43,
+      6.75
+     ],
+     [
+      "Malvern Ley Bank",
+      "D",
+      2695,
+      331,
+      12.28,
+      6.93
+     ]
+    ],
+    "row_count": 7,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "july 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": null
+   }
+  ]
+ },
+ {
+  "question": "What is our trading desk's P&L?",
+  "same_rows": true,
+  "same_headline_text": true,
+  "all_valid": false,
+  "flags": [],
+  "outcomes": [
+   "declined",
+   "declined",
+   "declined"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 500,
+    "valid": false,
+    "error": "no_sql_generated",
+    "detail": "Harborline is a custodian; this warehouse holds no trading desk or P&L data.",
+    "headline": null,
+    "narrative": null,
+    "sql": null,
+    "rows": null,
+    "row_count": null,
+    "retries": 0,
+    "flags": {},
+    "status_code": 500,
+    "unit_flags": [],
+    "scope_check": null
+   },
+   {
+    "status": 500,
+    "valid": false,
+    "error": "no_sql_generated",
+    "detail": "Harborline is a custodian; this warehouse holds no trading desk or P&L data \u2014 only custody operations (settlement, posit",
+    "headline": null,
+    "narrative": null,
+    "sql": null,
+    "rows": null,
+    "row_count": null,
+    "retries": 0,
+    "flags": {},
+    "status_code": 500,
+    "unit_flags": [],
+    "scope_check": null
+   },
+   {
+    "status": 500,
+    "valid": false,
+    "error": "no_sql_generated",
+    "detail": "Harborline is a global custodian; this warehouse contains only custody operations data (settlement, positions, cash, fee",
+    "headline": null,
+    "narrative": null,
+    "sql": null,
+    "rows": null,
+    "row_count": null,
+    "retries": 0,
+    "flags": {},
+    "status_code": 500,
+    "unit_flags": [],
+    "scope_check": null
+   }
+  ]
+ }
+]

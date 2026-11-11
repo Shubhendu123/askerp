@@ -1,4 +1,5 @@
 import { formatMoneyRows, moneyContext } from "./moneyFormat";
+import { countContext } from "./valueFormat";
 import Anthropic from "@anthropic-ai/sdk";
 import { getTenantConfig } from "./tenants";
 
@@ -15,6 +16,18 @@ const FIDELITY_RULE = `- FIDELITY: describe the time window, filters and grain O
 - NO ARITHMETIC: never add, subtract, multiply, divide, average or rescale numbers yourself. Quote money only exactly as it appears in "Result data" or "Pre-computed totals" (keep the K/M/B unit). If you need a total or sum that is not listed, do not state one.`;
 // D-048: appended only when non-policy documents (agreements, guides, notices, incident reports, regulation) are supplied.
 const DOC_RULE = `- DOCUMENTS & PRECEDENCE: documents are cited in the form shown, e.g. (CA-001 §2), (MG-IT v2.0 §1), (EVT-2630 §3). When a client agreement or regulation overrides a standard policy for this answer, say so explicitly and cite BOTH, e.g. "Eastgate's agreement sets 98.5% (CA-001 §2), overriding the standard PLATINUM 99.0% (POL-001 §2)". Use only the document version shown; never mention superseded versions. Take every number from the result data or the document text - never invent amounts. When a client agreement chunk and the policy chunk it overrides are both provided, the narrative MUST name both values and contain both citations plus the word "overrides" or "instead of" (e.g. "98.5% (CA-001 §2) instead of the standard 99.0% (POL-001 §2)"); when a contract caps or extends a liability, state the cap or extension and what the data amount would be without it. If no result rows were produced because no SQL was run, answer only from the documents and cite at least one.`;
+// D-050 (harborline only): structured answer layout + accuracy rules. Also enforced in code by lib/scopeCheck.ts.
+const HARBOR_ACCURACY = `- CUSTODY WORDING: Harborline HOLDS assets in custody (assets under custody); never say it "manages" assets - that would be AUM, a different measure.
+- NO PUFFERY: no marketing or comparison claims ("significant", "leading", "strong", peers, industry, market comparisons). State only what the data shows.
+- "ALL": write "all N" only when "Population facts" show N is the full population; otherwise write the count, or "N of M". Never write generic "all clients / all accounts / all markets / all counterparties".
+- NO FILLER: every bullet must add something the headline and the other bullets do not; no restating the date or data freshness unless the question asks.
+- POLICY NUMBERS: every percentage, threshold or amount you attribute to a policy or agreement must be copied exactly from the document text supplied; if you are not sure, leave the number out.
+- CREDITS: do not mention SLA credits or fee waivers unless the question asks about them.
+- PERIOD: if "Resolved period" is given, state it once, in the headline or the first bullet, with its reason, e.g. "September 2026 (latest complete month in the data)".`;
+const HARBOR_HEADLINE_RULE = `- Title: 4-8 words naming what was asked, sentence case, acronyms upper-case (SLA, AUC, USD), e.g. "Platinum clients below SLA target". No date or period (added separately), no metric ids.
+- Headline: ONE line, at most 14 words, plain English, the answer itself with its key number, no punctuation at end.`;
+const HARBOR_BULLETS_RULE = `- Bullets: 2 to 4 short bullets, each ONE sentence of at most 25 words. First: what happened. Second: why it matters. Third (only if a retrieved document applies): the policy or next step, with its citation. Wrap key numbers and names in **bold**. No long paragraphs.`;
+const HARBOR_FORMAT = `{"title": "...", "headline": "...", "bullets": ["...", "..."]}`;
 const FIDELITY_TENANTS = new Set(["harborline"]);
 
 /** Deterministic facts about the executed SQL: its WHERE/HAVING/ON predicates and whether any date filter exists. */
@@ -72,7 +85,12 @@ Output format:
   let out = base;
   if (withPolicies) out = out.replace("- Output ONLY valid JSON", `${POLICY_RULE}\n- Output ONLY valid JSON`);
   if (withDocs) out = out.replace("- Output ONLY valid JSON", `${DOC_RULE}\n- Output ONLY valid JSON`);
-  if (FIDELITY_TENANTS.has(tenant)) out = out.replace("- Output ONLY valid JSON", `${FIDELITY_RULE}\n- Output ONLY valid JSON`);
+  if (FIDELITY_TENANTS.has(tenant)) out = out.replace("- Output ONLY valid JSON", `${FIDELITY_RULE}\n${HARBOR_ACCURACY}\n- Output ONLY valid JSON`);
+  if (FIDELITY_TENANTS.has(tenant)) {
+    out = out.replace("- Headline: 6-10 words, plain English, no punctuation at end", HARBOR_HEADLINE_RULE)
+      .replace("- Narrative: 2-3 sentences max. State what the number means, one notable pattern if visible, one business implication.", HARBOR_BULLETS_RULE)
+      .replace('{"headline": "...", "narrative": "..."}', HARBOR_FORMAT);
+  }
   return out;
 }
 
@@ -86,6 +104,7 @@ interface NarrateInput {
   truncated: boolean;
   sql?: string; // D-048: the executed SQL; its filters are passed to the narrator (fidelity tenants only)
   policies?: Array<{ citation: string; text: string; governs?: string; doc_type?: string; authority_rank?: number | null; access_level?: string }>;
+  facts?: string[];      // D-050 (harborline): "Population facts" / "Resolved period" lines computed in code
   noSql?: boolean;       // D-048: no SQL was run; answer from the documents only
   enrichedCitations?: string[]; // D-048: citations of documents attached after the SQL ran (two-stage retrieval) // D-045: retrieved policy chunks, the only citable rules
 }
@@ -93,6 +112,8 @@ interface NarrateInput {
 export interface NarrateResult {
   headline: string;
   narrative: string;
+  title?: string;     // D-050 (harborline): short human card title
+  bullets?: string[]; // D-050 (harborline): 2-4 short bullets, key figures in **bold**; `narrative` is these joined with the bold markers removed
   usage?: { input_tokens: number; output_tokens: number }; // D-043: for request tracing
 }
 
@@ -119,7 +140,8 @@ export async function narrate(
     "Result data:",
     noSql ? "No SQL was run for this question; answer from the documents below only." : summariseRows(columns, FIDELITY_TENANTS.has(tenant) ? formatMoneyRows(columns, rows) : rows, row_count), // D-049: money pre-formatted K/M/B in code (harborline only)
     ...(sql && FIDELITY_TENANTS.has(tenant) ? ["", "Executed SQL facts:", sqlFacts(sql)] : []),
-    ...(FIDELITY_TENANTS.has(tenant) && !noSql && moneyContext(columns, rows).lines.length ? ["", "Pre-computed totals (computed in code; use verbatim):", ...moneyContext(columns, rows).lines] : []),
+    ...(FIDELITY_TENANTS.has(tenant) && !noSql && [...moneyContext(columns, rows).lines, ...countContext(columns, rows).lines].length ? ["", "Pre-computed totals (computed in code; use verbatim):", ...moneyContext(columns, rows).lines, ...countContext(columns, rows).lines] : []),
+    ...(input.facts && input.facts.length && FIDELITY_TENANTS.has(tenant) ? ["", ...input.facts] : []),
     ...(policies && policies.length > 0
       ? ["", "Policy rules retrieved (cite as shown):", ...policies.map((p) => `[${p.citation}]${p.governs ? ` (governs: ${p.governs})` : ""}${p.doc_type && p.doc_type !== "policy" ? ` (${p.doc_type}, authority_rank ${p.authority_rank ?? "n/a"}, ${p.access_level ?? ""})` : ""} ${p.text.slice(0, 1200)}`)]
       : []),
@@ -127,7 +149,7 @@ export async function narrate(
 
   const msg = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 320,
+    max_tokens: FIDELITY_TENANTS.has(tenant) ? 560 : 320,
     system: buildSystem(tenant, !!(policies && policies.length > 0), !!(policies && policies.some((p) => p.doc_type && p.doc_type !== "policy"))),
     messages: [{ role: "user", content: userMsg }],
   });
@@ -137,6 +159,15 @@ export async function narrate(
     .replace(/\s*```$/m, "");
 
   const usage = { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens };
+  if (FIDELITY_TENANTS.has(tenant)) {
+    try {
+      const j = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as { title?: string; headline?: string; bullets?: unknown; narrative?: string };
+      const bullets = (Array.isArray(j.bullets) ? j.bullets.map(String) : String(j.narrative ?? "").split(/(?<=[.!?])\s+/)).map((b) => b.trim()).filter(Boolean).slice(0, 4);
+      return { title: (j.title ?? "").trim(), headline: (j.headline ?? "").trim(), bullets, narrative: bullets.map(stripBold).join(" "), usage };
+    } catch {
+      return { headline: metric_used?.replace(/_/g, " ") ?? "Analysis result", narrative: raw.slice(0, 300), bullets: [], usage };
+    }
+  }
   try {
     const parsed = JSON.parse(raw) as NarrateResult;
     return {
@@ -153,6 +184,8 @@ export async function narrate(
     };
   }
 }
+
+export const stripBold = (t: string): string => t.replace(/\*\*/g, "");
 
 /** D-048: map retrieved policy/document chunks to the narrator's citable-document list. */
 export function toNarratorDocs(results: Array<{ type: string; id: string; text: string; policy?: { citation: string; governs?: string; doc_type?: string; authority_rank?: number | null; access_level?: string } }>) {

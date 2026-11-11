@@ -20,10 +20,19 @@ export interface TenantConfig {
   metaDescription: string;  // page <meta description>
   llmDescriptor: string;    // short descriptor used inside LLM system prompts
   suggestedQuestions: string[]; // landing-page chips; each must be answerable by this tenant's warehouse
+  // D-050: per-tenant branding. Defaults (see BRAND_DEFAULT) reproduce the original AskERP UI exactly.
+  productName: string;       // header wordmark + page titles
+  monogram: string;          // letters inside the header mark
+  theme: "default" | "navy"; // sets <html data-theme>; "navy" overrides CSS tokens in globals.css (harborline only)
+  showFeaturePills: boolean; // "Natural language" / "AI narration" header pills
+  showInsightTabs: boolean;  // Change / Contribution tabs
 }
+
+const BRAND_DEFAULT = { productName: "AskERP", monogram: "AE", theme: "default" as const, showFeaturePills: true, showInsightTabs: true };
 
 export const TENANTS: Record<string, TenantConfig> = {
   mro: {
+    ...BRAND_DEFAULT,
     id: "mro",
     company: "Summit Industrial Supply Co.",
     headerPill: "Summit Industrial Supply Co. ERP",
@@ -41,6 +50,8 @@ export const TENANTS: Record<string, TenantConfig> = {
     ],
   },
   harborline: {
+    ...BRAND_DEFAULT,
+    productName: "Harborline Analyst", monogram: "HA", theme: "navy", showFeaturePills: false, showInsightTabs: false, // D-050
     id: "harborline",
     company: "Harborline Global Custody",
     headerPill: "Harborline Global Custody",
@@ -48,7 +59,7 @@ export const TENANTS: Record<string, TenantConfig> = {
     analysisLabel: "Analysis · Harborline Global Custody",
     warehouseLabel: "Harborline Global Custody warehouse",
     metaDescription: "Conversational analytics for Harborline Global Custody — ask questions, get answers.",
-    llmDescriptor: "Harborline Global Custody, a mid-tier global custodian (securities services) with about $700B of assets under custody",
+    llmDescriptor: "Harborline Global Custody, a global custodian (securities services) that holds about $700B of assets under custody",
     suggestedQuestions: [
       "What is our overall settlement fail rate?",
       "Which counterparties cost us the most in penalties?",
@@ -57,6 +68,7 @@ export const TENANTS: Record<string, TenantConfig> = {
     ],
   },
   northwind: {
+    ...BRAND_DEFAULT,
     id: "northwind",
     company: "Northwind Furniture",
     headerPill: "Northwind Furniture ERP",

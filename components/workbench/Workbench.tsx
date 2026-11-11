@@ -7,6 +7,7 @@ import InsightTabs from "./InsightTabs";
 import ChangeTab from "./ChangeTab";
 import ContributionTab from "./ContributionTab";
 import DataOverviewCard from "./DataOverviewCard";
+import HarborlineAnswer from "./HarborlineAnswer";
 import { canContribute } from "@/lib/chartUtils";
 import { getTenantConfig, type TenantConfig } from "@/lib/tenants";
 
@@ -30,6 +31,12 @@ export interface AskResponse {
   narrate_time_ms: number;
   error: string | null;
   detail?: string;
+  // D-050 (harborline): structured answer + resolved relative period
+  title?: string;
+  bullets?: string[];
+  period?: { phrase: string; label: string; short: string; reason: string };
+  enriched_documents?: unknown[];
+  overrides?: Array<{ client: string; from: number | null; to: number; source: string; supersedes: string }>;
 }
 
 interface HistoryItem {
@@ -119,7 +126,7 @@ export default function Workbench({ tenant = getTenantConfig("mro") }: Workbench
   const isLanding = !response && !loading;
 
   return (
-    <div className="max-w-5xl w-full mx-auto">
+    <div className={`${tenant.showInsightTabs ? "max-w-5xl" : "max-w-6xl"} w-full mx-auto`}>
       {/* ── Persistent ask bar ─────────────────────────────────────────────── */}
       <div className="flex gap-2 items-stretch">
         <textarea
@@ -293,9 +300,16 @@ export default function Workbench({ tenant = getTenantConfig("mro") }: Workbench
               Back to overview
             </button>
             <AnalysisHeader response={response} loading={loading} activeQuestion={activeQuestion} tenant={tenant} />
-            <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
-            {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
-            {safeTab === "contribution" && response && <ContributionTab response={response} />}
+            {tenant.showInsightTabs ? (
+              <>
+                <InsightTabs activeTab={safeTab} onTabChange={setActiveTab} enabledTabs={enabledTabs} />
+                {safeTab === "change" && <ChangeTab response={response} loading={loading} />}
+                {safeTab === "contribution" && response && <ContributionTab response={response} />}
+              </>
+            ) : (
+              // D-050: tenants without the Change/Contribution tabs get the single structured answer card
+              <HarborlineAnswer response={response} loading={loading} />
+            )}
           </div>
         );
       })()}

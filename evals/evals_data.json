@@ -158,7 +158,8 @@
    ],
    "flags": [],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049.json"
   },
   {
    "question": "What are our total assets under custody?",
@@ -172,28 +173,13 @@
    ],
    "flags": [],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049.json"
   },
   {
    "question": "Which counterparties' settlement fails cost us the most in penalties?",
-   "verdict": "UNSTABLE",
+   "verdict": "STABLE",
    "rows_same": true,
-   "headline_same": false,
-   "outcomes": [
-    "valid",
-    "valid",
-    "valid"
-   ],
-   "flags": [
-    "unit:$416M"
-   ],
-   "http_500_non_refusal": 0,
-   "n_runs": 3
-  },
-  {
-   "question": "Which Platinum clients missed their SLA settlement target last month?",
-   "verdict": "UNSTABLE",
-   "rows_same": false,
    "headline_same": false,
    "outcomes": [
     "valid",
@@ -202,7 +188,33 @@
    ],
    "flags": [],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049_penalties_rerun.json",
+   "before": {
+    "verdict": "UNSTABLE",
+    "why": "$416M unit error",
+    "fix": "code check"
+   }
+  },
+  {
+   "question": "Which Platinum clients missed their SLA settlement target last month?",
+   "verdict": "STABLE",
+   "rows_same": true,
+   "headline_same": false,
+   "outcomes": [
+    "valid",
+    "valid",
+    "valid"
+   ],
+   "flags": [],
+   "http_500_non_refusal": 0,
+   "n_runs": 3,
+   "source": "stability_d049_platinum_rerun.json",
+   "before": {
+    "verdict": "UNSTABLE",
+    "why": "row order differed between runs",
+    "fix": "deterministic ORDER BY"
+   }
   },
   {
    "question": "Which corporate action elections did we miss, and what was the notice window?",
@@ -218,7 +230,8 @@
     "unit:$22.3M"
    ],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049.json"
   },
   {
    "question": "Which counterparties meet our tier-D criteria?",
@@ -232,7 +245,8 @@
    ],
    "flags": [],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049.json"
   },
   {
    "question": "What is our trading desk's P&L?",
@@ -246,7 +260,8 @@
    ],
    "flags": [],
    "http_500_non_refusal": 0,
-   "n_runs": 3
+   "n_runs": 3,
+   "source": "stability_d049.json"
   }
  ],
  "problems": [

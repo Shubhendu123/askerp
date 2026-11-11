@@ -22,13 +22,13 @@ export default function TopHeader() {
             borderRadius: "var(--radius-sm)",
           }}
         >
-          <span className="text-white text-[11px] font-medium tracking-tight">AE</span>
+          <span className="text-white text-[11px] font-medium tracking-tight">{tenant.monogram}</span>
         </div>
         <span
           className="font-medium leading-none"
           style={{ fontSize: 15, color: "var(--text-primary)" }}
         >
-          AskERP
+          {tenant.productName}
         </span>
         <span
           className="hidden sm:inline-block leading-none rounded-full whitespace-nowrap"
@@ -43,8 +43,8 @@ export default function TopHeader() {
         </span>
       </div>
 
-      {/* Right: feature pills */}
-      <div className="hidden md:flex items-center gap-2 shrink-0">
+      {/* Right: feature pills (D-050: hidden for tenants that opt out) */}
+      {tenant.showFeaturePills && <div className="hidden md:flex items-center gap-2 shrink-0">
         <span
           className="leading-none rounded-full whitespace-nowrap"
           style={{
@@ -67,7 +67,7 @@ export default function TopHeader() {
         >
           AI narration
         </span>
-      </div>
+      </div>}
     </header>
   );
 }
