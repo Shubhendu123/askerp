@@ -1,0 +1,327 @@
+[
+ {
+  "question": "Which Platinum clients missed their SLA settlement target last month?",
+  "same_rows": true,
+  "same_headline_text": false,
+  "all_valid": true,
+  "flags": [],
+  "outcomes": [
+   "valid",
+   "valid",
+   "valid"
+  ],
+  "http_500_non_refusal": 0,
+  "verdict": "STABLE",
+  "runs": [
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Eight Platinum clients fell short of 99% settlement target in September",
+    "narrative": "All eight Platinum clients missed the 99.0% on-time settlement rate (POL-001 \u00a72) in September 2026, ranging from 93.4% to 98.3%. Eastgate Capital Partners underperformed most severely at 93.4% across 4,136 instructions, while Montclair and Westmark came closest at 98.3%. Each breach triggers a 5% custody fee credit, capped at 20% monthly (POL-001 \u00a73).",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct, 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) >= 99.0 AS met_target FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND c.sla_tier = 'PLATINUM' AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      99,
+      false
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99,
+      false
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99,
+      false
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99,
+      false
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99,
+      false
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99,
+      false
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99,
+      false
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99,
+      false
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": null
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "8 Platinum clients fell short of 99% settlement rate in September",
+    "narrative": "All eight Platinum clients measured in September 2026 missed the 99.0% on-time settlement target (POL-001 \u00a72), with rates ranging from 93.4% to 98.3%. Eastgate Capital Partners posted the largest shortfall at 93.42%, falling 5.6 percentage points below the commitment across 4,136 instructions. Each breach triggers a 5% custody fee credit capped at 20% monthly per client (POL-001 \u00a73).",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) >= 99.0 AS met_target FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND c.sla_tier = 'PLATINUM' AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      99,
+      false
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99,
+      false
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99,
+      false
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99,
+      false
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99,
+      false
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99,
+      false
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99,
+      false
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99,
+      false
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": null
+   },
+   {
+    "status": 200,
+    "valid": true,
+    "error": null,
+    "detail": "",
+    "headline": "Eight Platinum clients fell below 99% settlement target in September",
+    "narrative": "All eight Platinum clients missed the 99.0% settlement rate target (POL-001 \u00a72) in September 2026, ranging from 93.4% to 98.3%. Eastgate Capital Partners had the lowest rate at 93.4% across 4,136 instructions, while Montclair and Westmark each achieved 98.3% but still fell short. Each breach triggers a 5% custody fee credit, capped at 20% monthly (POL-001 \u00a73).",
+    "sql": "SELECT c.client_name, c.sla_tier, d.year_num, d.month_num, COUNT(*) AS instructions, ROUND(100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*), 2) AS settlement_rate_pct, 99.0 AS target_pct, 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) >= 99.0 AS met_target FROM harborline.stl_trade_instruction i JOIN harborline.dim_client c ON c.client_key = i.client_key JOIN harborline.dim_date d ON d.date_key = i.intended_settle_date_key WHERE i.settlement_status IN ('SETTLED', 'FAILED') AND c.sla_tier = 'PLATINUM' AND d.year_num = 2026 AND d.month_num = 9 GROUP BY c.client_name, c.sla_tier, d.year_num, d.month_num HAVING 100.0 * COUNT(*) FILTER (WHERE i.actual_settle_date_key = i.intended_settle_date_key) / COUNT(*) < 99.0 ORDER BY settlement_rate_pct ASC, c.client_name ASC\nLIMIT 1000",
+    "rows": [
+     [
+      "Eastgate Capital Partners",
+      "PLATINUM",
+      2026,
+      9,
+      4136,
+      93.42,
+      99,
+      false
+     ],
+     [
+      "Union Crest Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1291,
+      96.82,
+      99,
+      false
+     ],
+     [
+      "Beacon Insurance Group",
+      "PLATINUM",
+      2026,
+      9,
+      828,
+      97.1,
+      99,
+      false
+     ],
+     [
+      "Pinnacle Asset Management",
+      "PLATINUM",
+      2026,
+      9,
+      1674,
+      97.13,
+      99,
+      false
+     ],
+     [
+      "Vantage Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      974,
+      97.64,
+      99,
+      false
+     ],
+     [
+      "Northgate Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      620,
+      97.74,
+      99,
+      false
+     ],
+     [
+      "Montclair Pension Fund",
+      "PLATINUM",
+      2026,
+      9,
+      725,
+      98.34,
+      99,
+      false
+     ],
+     [
+      "Westmark Sovereign Investment Authority",
+      "PLATINUM",
+      2026,
+      9,
+      963,
+      98.34,
+      99,
+      false
+     ]
+    ],
+    "row_count": 8,
+    "retries": 0,
+    "flags": {
+     "window_claims": [
+      "september 2026"
+     ],
+     "window_bad": false,
+     "scope_viol": []
+    },
+    "status_code": 200,
+    "unit_flags": [],
+    "scope_check": null
+   }
+  ]
+ }
+]
